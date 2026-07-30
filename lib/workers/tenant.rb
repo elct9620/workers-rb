@@ -37,6 +37,7 @@ module Workers
 
     def initialize(dir, runtime:)
       @dir = dir
+      @name = File.basename(dir)
       @runtime = runtime
       @lock = Mutex.new
     end
@@ -44,10 +45,11 @@ module Workers
     # Runs one invocation. The Bindings are supplied here rather than when the
     # Sandbox is built, so nothing this request touched survives into the next
     # one.
-    def call(rack_request)
+    def call(rack_request, node:)
       loaded = current
 
       triplet = loaded.sandbox.run(loaded.entrypoint, Guest::Request.new(rack_request)) do |context|
+        context.bind("Env", Guest::Env.new(node: node, tenant: @name))
         context.bind("Time", Guest::Clock.new)
         context.bind("Random", Guest::Entropy.new)
       end.value
@@ -80,6 +82,7 @@ module Workers
     def build
       manifest = read_manifest
       sandbox = @runtime.sandbox
+      sandbox.bind("Env")
       sandbox.bind("Time")
       sandbox.bind("Random")
       sources.each_with_index do |path, index|

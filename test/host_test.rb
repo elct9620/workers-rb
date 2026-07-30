@@ -70,6 +70,7 @@ class HostTest < Minitest::Test
     assert_equal "Kobako::ServiceError", body["refused_clock"]
     assert_equal "Kobako::ServiceError", body["refused_entropy"]
     assert_equal "Kobako::ServiceError", body["refused_request"]
+    assert_equal "Kobako::ServiceError", body["refused_env"]
   end
 
   def test_the_worker_reads_every_field_the_request_surface_declares

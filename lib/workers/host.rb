@@ -7,6 +7,7 @@ module Workers
   # Tenant and hands back what that Tenant's Worker returned, unchanged.
   class Host < Sinatra::Base
     set :app_dir, ENV.fetch("WORKERS_APP_DIR", "app")
+    set :node, Node.current
     set :runtime, Runtime.default(
       guest_binary: ENV.fetch("WORKERS_GUEST_BINARY", Workers.default_guest_binary)
     )
@@ -38,7 +39,7 @@ module Workers
 
       request.script_name = "/#{name}"
       request.path_info = rest
-      tenant.call(request)
+      tenant.call(request, node: settings.node)
     rescue InvalidManifest
       # An unreadable Manifest is not a Tenant, so its endpoints answer as
       # though nothing were published there.

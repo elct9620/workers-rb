@@ -6,7 +6,7 @@ placing files in a shared directory, and the Host serves them from inside
 
 [SPEC.md](SPEC.md) is the target state. What runs today is the single-node
 development environment: path-form routing, per-tenant sandboxes, and the
-`Time` and `Random` Bindings.
+`Env`, `Time`, and `Random` Bindings.
 
 ## Running it
 
@@ -45,6 +45,6 @@ bundle exec puma
 ## What tenant code can reach
 
 Nothing but what the Host hands it. The mruby guest has no filesystem,
-network, environment, or process; the request, the clock, and the entropy
-source arrive as Host objects that answer only the methods
-[SPEC.md](SPEC.md) lists for them.
+network, environment, or process; the request, the node it runs on, the
+clock, and the entropy source arrive as Host objects that answer only the
+methods [SPEC.md](SPEC.md) lists for them.
