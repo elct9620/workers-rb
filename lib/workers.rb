@@ -13,10 +13,10 @@ end
 
 # Defined above the requires because `Host` reads the default while its class
 # body runs.
+require_relative "workers/databases"
 require_relative "workers/environment"
 require_relative "workers/failure"
 require_relative "workers/guest"
-require_relative "workers/databases"
 require_relative "workers/manifest"
 require_relative "workers/node"
 require_relative "workers/runtime"

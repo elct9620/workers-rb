@@ -93,6 +93,27 @@ class DatabaseTest < TestHelper::Case
     end
   end
 
+  # Each invocation holds its own connection to the one file, so a writer that
+  # meets another's lock waits for it rather than answering a failure.
+  def test_concurrent_invocations_writing_one_database_all_complete
+    mounting do
+      serving("busy", manifest: MAIN, source: probing(<<~RUBY)) do
+        DB::Main.execute("create table if not exists hits (n integer)")
+        DB::Main.execute("insert into hits values (1)")
+        DB::Main.query("select count(*) as n from hits")[0]["n"]
+      RUBY
+        get "/busy" # settle the table before the burst
+
+        answers = 12.times.map {
+          Thread.new { Rack::MockRequest.new(Workers::Host).get("/busy") }
+        }.map { |thread| JSON.parse(thread.value.body) }
+
+        assert_empty(answers.filter_map { |answer| answer["message"] })
+        assert_equal 13, answers.filter_map { |answer| answer["value"] }.max
+      end
+    end
+  end
+
   def test_a_mount_the_host_cannot_open_is_a_binding_failure
     Workers::Host.set :databases, Workers::Databases.new(root: "/no/such/mount")
 

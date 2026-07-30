@@ -12,7 +12,9 @@ module Workers
       new(root: env.fetch("WORKERS_DB_DIR", "db"))
     end
 
-    def open(tenant, identifier)
+    # The Binding for one Tenant's database. Nothing is opened here — the file
+    # is reached on the first statement run against it.
+    def for(tenant, identifier)
       Guest::Database.new(File.join(root, "#{tenant}-#{identifier}.db"))
     end
   end

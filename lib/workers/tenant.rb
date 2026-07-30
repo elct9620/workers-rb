@@ -50,7 +50,7 @@ module Workers
     def call(rack_request, node:, databases:)
       loaded = current
       supplied = loaded.databases.to_h { |constant, identifier|
-        [ constant, databases.open(@name, identifier) ]
+        [ constant, databases.for(@name, identifier) ]
       }
 
       triplet = loaded.sandbox.run(loaded.entrypoint, Environment.for(rack_request)) do |context|
