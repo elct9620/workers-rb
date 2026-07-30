@@ -1,1 +1,1 @@
-App = ->(request) { [200, {}, ["wrong constant"]] }
+App = ->(env) { [200, {}, ["wrong constant"]] }

@@ -50,7 +50,7 @@ module Workers
     def call(rack_request, node:)
       loaded = current
 
-      triplet = loaded.sandbox.run(loaded.entrypoint, Guest::Request.new(rack_request)) do |context|
+      triplet = loaded.sandbox.run(loaded.entrypoint, Environment.for(rack_request)) do |context|
         context.bind("Env", Guest::Env.new(node: node, tenant: @name))
         context.bind("Time", Guest::Clock.new)
         context.bind("Random", Guest::Entropy.new)

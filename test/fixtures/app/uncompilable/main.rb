@@ -1,1 +1,1 @@
-App = ->(request) { [200, {}, ["oops"
+App = ->(env) { [200, {}, ["oops"

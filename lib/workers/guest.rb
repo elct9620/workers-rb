@@ -31,59 +31,6 @@ module Workers
       end
     end
 
-    # The request as tenant code reads it. A `Rack::Request` cannot cross the
-    # boundary itself — the guest could call `#env` on it and take the whole
-    # Rack environment, and the Host's configuration with it.
-    class Request
-      include AllowList
-
-      reachable :request_method, :script_name, :path, :query, :headers, :body
-
-      # Neither carries the `HTTP_` prefix the rest of the headers do.
-      CONTENT_HEADERS = {
-        "CONTENT_TYPE" => "content-type",
-        "CONTENT_LENGTH" => "content-length"
-      }.freeze
-
-      def initialize(rack_request)
-        @rack = rack_request
-      end
-
-      # Named as Rack names it. `method` is unreachable whatever a Binding
-      # calls it: the guest refuses it before dispatch, because on a proxy it
-      # is `Object#method` and would hand out a callable to anything.
-      def request_method = @rack.request_method
-      def script_name = @rack.script_name
-      def path = @rack.path_info
-      def query = @rack.params
-
-      # Every field read is its own round-trip, so tenant code may reach this
-      # one after something else has already consumed the input.
-      def body
-        input = @rack.body
-        return "" if input.nil?
-
-        input.rewind if input.respond_to?(:rewind)
-        input.read.to_s
-      end
-
-      def headers
-        @rack.each_header.filter_map { |key, value|
-          name = header_name(key)
-          [ name, value ] if name
-        }.to_h
-      end
-
-      private
-
-      def header_name(key)
-        return CONTENT_HEADERS[key] if CONTENT_HEADERS.key?(key)
-        return unless key.start_with?("HTTP_")
-
-        key.delete_prefix("HTTP_").downcase.tr("_", "-")
-      end
-    end
-
     # Where and why this invocation is running. The Node and the Tenant are
     # the Host's facts; the request identity is minted here, so one invocation
     # reads one value however often it asks.

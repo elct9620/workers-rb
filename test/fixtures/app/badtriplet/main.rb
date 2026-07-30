@@ -1,1 +1,1 @@
-App = ->(request) { "not a triplet" }
+App = ->(env) { "not a triplet" }

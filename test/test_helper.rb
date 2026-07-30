@@ -49,7 +49,7 @@ module TestHelper
       FileUtils.mkdir_p(dir)
       File.write(File.join(dir, "app.json"), manifest)
       File.write(File.join(dir, "main.rb"), <<~RUBY)
-        App = ->(request) { [200, { "content-type" => "text/plain" }, ["#{body}"]] }
+        App = ->(env) { [200, { "content-type" => "text/plain" }, ["#{body}"]] }
       RUBY
       dir
     end

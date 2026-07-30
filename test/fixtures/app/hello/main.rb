@@ -1,3 +1,3 @@
-App = ->(request) {
-  [200, { "content-type" => "text/plain" }, ["hello from #{request.path}\n"]]
+App = ->(env) {
+  [200, { "content-type" => "text/plain" }, ["hello from #{env["path"]}\n"]]
 }

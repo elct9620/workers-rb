@@ -1,4 +1,4 @@
-App = ->(request) {
+App = ->(env) {
   body = JSON.generate(
     "node" => Env.node,
     "writer" => Env.writer?,

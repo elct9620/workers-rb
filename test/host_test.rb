@@ -60,11 +60,10 @@ class HostTest < TestHelper::Case
     assert_equal "Float", body["allowed"]
     assert_equal "Kobako::ServiceError", body["refused_clock"]
     assert_equal "Kobako::ServiceError", body["refused_entropy"]
-    assert_equal "Kobako::ServiceError", body["refused_request"]
     assert_equal "Kobako::ServiceError", body["refused_env"]
   end
 
-  def test_the_worker_reads_every_field_the_request_surface_declares
+  def test_the_request_environment_carries_every_field_it_declares
     post "/surface/items?q=1", "payload",
          { "CONTENT_TYPE" => "text/plain", "HTTP_X_PROBE" => "seen" }
     body = JSON.parse(last_response.body)
@@ -75,6 +74,25 @@ class HostTest < TestHelper::Case
     assert_equal({ "q" => "1" }, body["query"])
     assert_equal "seen", body["probe"]
     assert_equal "payload", body["body"]
+  end
+
+  # What the Host leaves out has no name in the guest at all, so the keys are
+  # part of the contract rather than a starting point.
+  def test_the_request_environment_carries_nothing_beyond_those_fields
+    get "/surface"
+
+    assert_equal %w[body headers path query request_method script_name],
+                 JSON.parse(last_response.body)["keys"]
+  end
+
+  # `query` is the query string's, so a form field a Worker wants is one it
+  # reads out of the body itself.
+  def test_a_form_field_is_no_query_parameter
+    post "/surface", "shipped=yes", { "CONTENT_TYPE" => "application/x-www-form-urlencoded" }
+    body = JSON.parse(last_response.body)
+
+    assert_empty body["query"]
+    assert_equal "shipped=yes", body["body"]
   end
 
   def test_a_failing_tenant_answers_without_disclosing_the_host

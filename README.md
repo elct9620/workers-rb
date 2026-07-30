@@ -24,8 +24,8 @@ restart.
 
 ```ruby
 # app/hello/main.rb
-App = ->(request) {
-  [200, { "content-type" => "text/plain" }, ["hello from #{request.path}\n"]]
+App = ->(env) {
+  [200, { "content-type" => "text/plain" }, ["hello from #{env["path"]}\n"]]
 }
 ```
 
@@ -45,18 +45,19 @@ bundle exec puma
 ## What tenant code can reach
 
 Nothing but what the Host hands it. The mruby guest has no filesystem,
-network, environment, or process; the request, the node it runs on, the
-clock, and the entropy source arrive as Host objects that answer only the
-methods [SPEC.md](SPEC.md) lists for them.
+network, environment, or process. A Worker receives the request as a plain
+Hash the Host composed, so a field the Host left out has no name to call at
+all; the node it runs on, the clock, and the entropy source arrive as Host
+objects that answer only the methods [SPEC.md](SPEC.md) lists for them.
 
-Every sandbox also carries the Runtime Kit — `Req` to read the request
-without a round-trip per field, and `Res` to shape a Rack triplet as text,
-as JSON, or with a chosen status. It runs inside the guest and grants
-nothing; a Worker that returns a triplet itself needs none of it.
+Every sandbox also carries the Runtime Kit — `Request` to read that Hash by
+name, and `Response` to shape a Rack triplet as text, as JSON, or with a
+chosen status. It runs inside the guest and grants nothing; a Worker that
+returns a triplet itself needs none of it.
 
 ```ruby
-App = ->(request) {
-  req = Req.new(request)
-  Res.json({ "node" => Env.node, "path" => req.path })
+App = ->(env) {
+  req = Request.new(env)
+  Response.json({ "node" => Env.node, "path" => req.path })
 }
 ```

@@ -1,1 +1,1 @@
-App = ->(request) { Time.at(0) }
+App = ->(env) { Time.at(0) }

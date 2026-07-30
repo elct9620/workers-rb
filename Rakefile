@@ -24,14 +24,16 @@ namespace :wasm do
 end
 
 SAMPLE_TENANT = <<~'RUBY'
-  App = ->(request) {
-    body = JSON.generate(
-      "tenant" => request.script_name,
-      "path" => request.path,
+  App = ->(env) {
+    req = Request.new(env)
+
+    Response.json({
+      "tenant" => Env.tenant,
+      "node" => Env.node,
+      "path" => req.path,
       "time" => Time.now,
       "roll" => Random.rand(6) + 1
-    )
-    [200, { "content-type" => "application/json" }, [body]]
+    })
   }
 RUBY
 

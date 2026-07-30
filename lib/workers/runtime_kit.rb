@@ -2,49 +2,47 @@
 
 module Workers
   # The mruby source every Sandbox carries ahead of a Tenant's own files, so
-  # tenant code reaches `Req` and `Res` at the top level.
+  # tenant code reaches `Request` and `Response` at the top level.
   #
-  # It runs entirely in the guest and crosses no boundary: `Req` only keeps
-  # what the Request Binding already answered, and `Res` only shapes a Rack
+  # It runs entirely in the guest and crosses no boundary: `Request` names the
+  # keys of a Hash the Worker already holds, and `Response` shapes a Rack
   # triplet. A Tenant that defines either name reaches its own definition,
   # because snippets replay in load order and a Tenant's files come last.
   module RuntimeKit
     NAME = "RuntimeKit"
 
     SOURCE = <<~'MRUBY'
-      class Req
-        def initialize(request)
-          @request = request
+      class Request
+        def initialize(env)
+          @env = env
         end
 
-        # Every field costs a round-trip to the Host, so each is read once and
-        # kept for the rest of the invocation.
         def request_method
-          @request_method ||= @request.request_method
+          @env["request_method"]
         end
 
         def script_name
-          @script_name ||= @request.script_name
+          @env["script_name"]
         end
 
         def path
-          @path ||= @request.path
+          @env["path"]
         end
 
         def query
-          @query ||= @request.query
+          @env["query"]
         end
 
         def headers
-          @headers ||= @request.headers
+          @env["headers"]
         end
 
         def body
-          @body ||= @request.body
+          @env["body"]
         end
       end
 
-      module Res
+      module Response
         def self.text(body, status: 200, headers: {})
           [status, { "content-type" => "text/plain; charset=utf-8" }.merge(headers), [body.to_s]]
         end

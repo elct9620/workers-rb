@@ -1,1 +1,1 @@
-App = ->(request) { raise "tenant code went wrong" }
+App = ->(env) { raise "tenant code went wrong" }

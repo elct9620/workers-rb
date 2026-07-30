@@ -37,7 +37,7 @@ class RuntimeKitTest < TestHelper::Case
     assert_equal "text/plain; charset=utf-8", last_response.headers["content-type"]
   end
 
-  def test_the_kit_reads_every_field_the_request_surface_declares
+  def test_the_kit_reads_every_field_the_request_environment_carries
     post "/kit/items?q=1", "payload",
          { "CONTENT_TYPE" => "text/plain", "HTTP_X_PROBE" => "seen" }
     body = JSON.parse(last_response.body)
@@ -48,12 +48,6 @@ class RuntimeKitTest < TestHelper::Case
     assert_equal({ "q" => "1" }, body["query"])
     assert_equal "seen", body["probe"]
     assert_equal "payload", body["body"]
-  end
-
-  def test_a_field_read_twice_costs_the_host_one_round_trip
-    get "/kit/items"
-
-    assert_equal true, JSON.parse(last_response.body)["cached"]
   end
 
   def test_a_tenant_defining_a_kit_name_reaches_its_own_definition
