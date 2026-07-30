@@ -253,9 +253,9 @@ These roles constitute the system. Later layers use these names exclusively.
 | E-08 | Tenant code exceeds the timeout | 503 marked as a timeout |
 | E-09 | Tenant code exhausts the memory limit | 503 marked as a memory limit |
 | E-10 | Tenant code leaves a refused Binding call unrescued — a method outside the allow list, or a pending Binding called before it is supplied | 500 marked as a binding failure |
-| E-11 | A Binding's database file cannot be created or opened | 500 marked as a binding failure |
-| E-12 | A write from a non-Writer node cannot reach the Writer | 500 marked as a binding failure |
-| E-13 | The shared directory is unreadable | Every Tenant endpoint answers 503; a cached Sandbox does not serve while the directory is unreadable |
+| E-11 | A Binding's database file cannot be created or opened | 500 marked as a binding failure; the Host records what it could not reach |
+| E-12 | A write from a non-Writer node cannot reach the Writer | 500 marked as a binding failure; the Host records what it could not reach |
+| E-13 | The shared directory is unreadable | Every Tenant endpoint answers 503; a cached Sandbox does not serve while the directory is unreadable; the Host records what it could not read |
 | E-14 | The Sandbox produces no recognisable result and its execution environment is corrupted | 503 marked as runtime corruption |
 
 ---
@@ -428,3 +428,4 @@ A database file is `<tenant>-<database identifier>.db` at the root of the replic
 | Any routing ambiguity | Treat it as not routable rather than guessing the target Tenant |
 | Any disagreement between the shared directory and cached Host state | The shared directory governs |
 | Any failure message returned to a tenant or outward | Carry at most the failure class and the tenant's own information |
+| Any failure the Host caused rather than the Tenant | Record it where the operator reads, naming what could not be reached. The response is unchanged: a failure class alone cannot say whose fault it was, and only the operator can act on the difference |
