@@ -19,13 +19,13 @@ module Workers
     # Read most-specific first: kobako's classes nest, and a TimeoutError is a
     # TrapError too.
     TABLE = [
-      [Kobako::UndefinedEntrypointError, "undefined_entrypoint", 500],
-      [Kobako::TimeoutError, "timeout", 503],
-      [Kobako::MemoryLimitError, "memory_limit", 503],
-      [Kobako::ServiceError, "binding_failure", 500],
-      [Kobako::SandboxError, "tenant_exception", 500],
-      [Kobako::TrapError, "runtime_corruption", 503],
-      [InvalidResponse, "invalid_response", 500]
+      [ Kobako::UndefinedEntrypointError, "undefined_entrypoint", 500 ],
+      [ Kobako::TimeoutError, "timeout", 503 ],
+      [ Kobako::MemoryLimitError, "memory_limit", 503 ],
+      [ Kobako::ServiceError, "binding_failure", 500 ],
+      [ Kobako::SandboxError, "tenant_exception", 500 ],
+      [ Kobako::TrapError, "runtime_corruption", 503 ],
+      [ InvalidResponse, "invalid_response", 500 ]
     ].freeze
     private_constant :TABLE
 
@@ -58,7 +58,7 @@ module Workers
     # The failure class and nothing else: no Host environment variable, no
     # filesystem path, no internal address.
     def to_response
-      [status, { "content-type" => "text/plain; charset=utf-8" }, ["#{name}\n"]]
+      [ status, { "content-type" => "text/plain; charset=utf-8" }, [ "#{name}\n" ] ]
     end
   end
 end

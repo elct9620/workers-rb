@@ -26,7 +26,7 @@ module Workers
       dir = File.join(root, name)
       return forget(dir) unless File.file?(File.join(dir, MANIFEST))
 
-      REGISTRY_LOCK.synchronize { REGISTRY[[dir, runtime]] ||= new(dir, runtime: runtime) }
+      REGISTRY_LOCK.synchronize { REGISTRY[[ dir, runtime ]] ||= new(dir, runtime: runtime) }
     end
 
     def self.forget(dir)
@@ -129,9 +129,9 @@ module Workers
     # A file that vanishes between the glob and the stat simply drops out,
     # which reads as a change and rebuilds.
     def fingerprint
-      [File.join(@dir, MANIFEST), *sources].filter_map do |path|
+      [ File.join(@dir, MANIFEST), *sources ].filter_map do |path|
         stat = File.stat(path)
-        [path, stat.mtime.to_r, stat.size]
+        [ path, stat.mtime.to_r, stat.size ]
       rescue Errno::ENOENT
         nil
       end

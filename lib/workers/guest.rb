@@ -68,7 +68,7 @@ module Workers
       def headers
         @rack.each_header.filter_map { |key, value|
           name = header_name(key)
-          [name, value] if name
+          [ name, value ] if name
         }.to_h
       end
 

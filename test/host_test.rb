@@ -145,7 +145,7 @@ class HostTest < Minitest::Test
       # A released Sandbox has no outward sign, so the assertion reads the
       # registry that would otherwise keep it alive.
       registry = Workers::Tenant.const_get(:REGISTRY, false)
-      assert_empty registry.select { |(dir, _), _| dir.start_with?(root) }
+      assert_empty(registry.select { |(dir, _), _| dir.start_with?(root) })
     end
   end
 

@@ -1,0 +1,21 @@
+inherit_gem:
+  rubocop-rails-omakase: rubocop.yml
+
+AllCops:
+  NewCops: enable
+  # Only the Host is ours to style. The guest binary is downloaded, and both
+  # `app/` and the fixtures under it are tenant code running on mruby.
+  Exclude:
+    - vendor/**/*
+    - app/**/*
+    - test/fixtures/app/**/*
+
+# Omakase settles formatting only. Lint is what catches a mistake rather than
+# a preference, so it stays on.
+Lint:
+  Enabled: true
+
+# Tenant sources load in order, so the sort is a stated guarantee rather than
+# a reliance on whatever Dir.glob happens to return.
+Lint/RedundantDirGlobSort:
+  Enabled: false

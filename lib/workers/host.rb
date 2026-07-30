@@ -56,7 +56,7 @@ module Workers
     # becomes the prefix, the remainder becomes the path.
     def split_path
       _, name, rest = request.path_info.split("/", 3)
-      [name.to_s, rest.nil? ? "" : "/#{rest}"]
+      [ name.to_s, rest.nil? ? "" : "/#{rest}" ]
     end
   end
 end
