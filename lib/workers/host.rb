@@ -8,6 +8,7 @@ module Workers
   class Host < Sinatra::Base
     set :app_dir, ENV.fetch("WORKERS_APP_DIR", "app")
     set :node, Node.current
+    set :databases, Databases.current
     set :runtime, Runtime.default(
       guest_binary: ENV.fetch("WORKERS_GUEST_BINARY", Workers.default_guest_binary)
     )
@@ -39,7 +40,7 @@ module Workers
 
       request.script_name = "/#{name}"
       request.path_info = rest
-      tenant.call(request, node: settings.node)
+      tenant.call(request, node: settings.node, databases: settings.databases)
     rescue InvalidManifest => e
       # A Manifest the Host cannot act on is not a Tenant, so its endpoints
       # answer as though nothing were published there. The operator is the

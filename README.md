@@ -6,7 +6,9 @@ placing files in a shared directory, and the Host serves them from inside
 
 [SPEC.md](SPEC.md) is the target state. What runs today is the single-node
 development environment: path-form routing, per-tenant sandboxes, the
-`Env`, `Time`, and `Random` Bindings, and the Runtime Kit.
+Runtime Kit, and the `Env`, `DB`, `Time`, and `Random` Bindings. A write
+reaches the local database file whatever `WORKERS_WRITER` says, because
+routing a replica's writes to the Writer arrives with the cluster.
 
 ## Running it
 
@@ -29,6 +31,22 @@ App = ->(env) {
 }
 ```
 
+A Tenant that declares a database in its Manifest reaches it under the
+constant it named, and the Host creates the file on first use.
+
+```json
+{ "bindings": { "db": { "DB::Main": "main" } } }
+```
+
+```ruby
+DB::Main.execute("insert into visits values (?)", Time.now)
+DB::Main.query("select count(*) as n from visits")   # => [{ "n" => 3 }]
+```
+
+The files sit flat on the database mount as `<tenant>-<identifier>.db`, so
+no Tenant can name another's. `WORKERS_DB_DIR` points the Host at that mount;
+`rake dev:tenant` creates `db/` for running outside a container.
+
 ## Testing
 
 ```sh
@@ -47,7 +65,8 @@ bundle exec puma
 Nothing but what the Host hands it. The mruby guest has no filesystem,
 network, environment, or process. A Worker receives the request as a plain
 Hash the Host composed, so a field the Host left out has no name to call at
-all; the node it runs on, the clock, and the entropy source arrive as Host
+all; the node it runs on, the databases it declared, the clock, and the
+entropy source arrive as Host
 objects that answer only the methods [SPEC.md](SPEC.md) lists for them.
 
 Every sandbox also carries the Runtime Kit — `Request` to read that Hash by

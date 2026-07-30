@@ -20,6 +20,7 @@ module TestHelper
     def setup
       Workers::Host.set :app_dir, FIXTURE_APP_DIR
       Workers::Host.set :node, Workers::Node.current
+      Workers::Host.set :databases, Workers::Databases.current
       Workers::Host.set :runtime, Workers::Runtime.default
     end
 
@@ -31,9 +32,9 @@ module TestHelper
     # block. Rack::Test settles its session on a test's first request, so the
     # Host is pointed here directly rather than through `app` — a later
     # request would otherwise still read the directory the first one set.
-    def serving(name, manifest: "{}", body: "here")
+    def serving(name, manifest: "{}", body: "here", source: worker(body))
       Dir.mktmpdir do |root|
-        publish(root, name, manifest: manifest, body: body)
+        publish(root, name, manifest: manifest, source: source)
         Workers::Host.set :app_dir, root
         yield root
       ensure
@@ -44,14 +45,27 @@ module TestHelper
     end
 
     # Writes a Tenant into a shared directory, or rewrites one already there.
-    def publish(root, name, manifest: "{}", body: "here")
+    def publish(root, name, manifest: "{}", body: "here", source: worker(body))
       dir = File.join(root, name)
       FileUtils.mkdir_p(dir)
       File.write(File.join(dir, "app.json"), manifest)
-      File.write(File.join(dir, "main.rb"), <<~RUBY)
+      File.write(File.join(dir, "main.rb"), source)
+      dir
+    end
+
+    # A Worker answering with something the test can recognise.
+    def worker(body)
+      <<~RUBY
         App = ->(env) { [200, { "content-type" => "text/plain" }, ["#{body}"]] }
       RUBY
-      dir
+    end
+
+    # A mount for the Tenants' database files, pointed at for the block.
+    def mounting
+      Dir.mktmpdir do |root|
+        Workers::Host.set :databases, Workers::Databases.new(root: root)
+        yield root
+      end
     end
   end
 end

@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "securerandom"
+require "sqlite3"
 
 module Workers
   # The Host objects tenant code can reach. Every one of them narrows its
@@ -49,6 +50,53 @@ module Workers
 
       def node = @node.name
       def writer? = @node.writer?
+    end
+
+    # One SQLite database a Tenant declared, reachable under the constant the
+    # Manifest gave it. The Host resolves the file, so tenant code names a
+    # Binding rather than a path and reaches no database it did not declare.
+    class Database
+      include AllowList
+
+      reachable :query, :execute
+
+      def initialize(path)
+        @path = path
+      end
+
+      # An Array of rows, each a Hash of column name to value.
+      def query(sql, *params) = connection.execute(sql, params)
+
+      # The rows the statement affected.
+      def execute(sql, *params)
+        connection.execute(sql, params)
+        connection.changes
+      end
+
+      # Not reachable from the guest — the allow list omits it — so the Host
+      # closes what one invocation opened without tenant code being able to.
+      def close
+        @connection&.close
+        @connection = nil
+      end
+
+      private
+
+      # Concurrent invocations of one Tenant each hold their own connection to
+      # the same file, so a writer meeting another's lock waits rather than
+      # failing. The wait outlasts no request: the invocation's own wall clock
+      # is what ends it.
+      BUSY_TIMEOUT = 5_000
+      private_constant :BUSY_TIMEOUT
+
+      # Opened on first use, so a Tenant that declares a database it never
+      # touches pays nothing, and a mount that cannot be opened reaches tenant
+      # code as a failure it may rescue rather than one that precedes the
+      # invocation.
+      def connection
+        @connection ||= SQLite3::Database.new(@path, results_as_hash: true)
+                                         .tap { |db| db.busy_timeout = BUSY_TIMEOUT }
+      end
     end
 
     # The guest's mruby build defines no `Time`, so the Host supplies one.

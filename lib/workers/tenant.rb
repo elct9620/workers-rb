@@ -7,7 +7,7 @@ module Workers
     NAME = /\A[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\z/
     MANIFEST = "app.json"
 
-    Loaded = Struct.new(:sandbox, :entrypoint)
+    Loaded = Struct.new(:sandbox, :entrypoint, :databases)
     private_constant :Loaded
 
     REGISTRY = {}
@@ -47,19 +47,25 @@ module Workers
     # Runs one invocation. The Bindings are supplied here rather than when the
     # Sandbox is built, so nothing this request touched survives into the next
     # one.
-    def call(rack_request, node:)
+    def call(rack_request, node:, databases:)
       loaded = current
+      supplied = loaded.databases.to_h { |constant, identifier|
+        [ constant, databases.open(@name, identifier) ]
+      }
 
       triplet = loaded.sandbox.run(loaded.entrypoint, Environment.for(rack_request)) do |context|
         context.bind("Env", Guest::Env.new(node: node, tenant: @name))
         context.bind("Time", Guest::Clock.new)
         context.bind("Random", Guest::Entropy.new)
+        supplied.each { |constant, database| context.bind(constant, database) }
       end.value
 
       ensure_triplet(triplet)
     rescue Kobako::TrapError
       discard
       raise
+    ensure
+      supplied&.each_value(&:close)
     end
 
     private
@@ -87,12 +93,16 @@ module Workers
       sandbox.bind("Env")
       sandbox.bind("Time")
       sandbox.bind("Random")
+      # Declared here and supplied per invocation, so a constant the Manifest
+      # left out is a `NameError` in the guest rather than a Binding that
+      # happens to be empty.
+      manifest.databases.each_key { |constant| sandbox.bind(constant) }
       sandbox.preload(code: RuntimeKit::SOURCE, name: RuntimeKit::NAME)
       sources.each_with_index do |path, index|
         sandbox.preload(code: read(path), name: snippet_name(path, index))
       end
 
-      Loaded.new(sandbox, manifest.entrypoint.to_sym)
+      Loaded.new(sandbox, manifest.entrypoint.to_sym, manifest.databases)
     end
 
     def read(path)

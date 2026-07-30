@@ -23,16 +23,23 @@ namespace :wasm do
   task fetch: GUEST_BINARY
 end
 
+SAMPLE_MANIFEST = <<~'JSON'
+  { "bindings": { "db": { "DB::Main": "main" } } }
+JSON
+
 SAMPLE_TENANT = <<~'RUBY'
   App = ->(env) {
     req = Request.new(env)
 
+    DB::Main.execute("create table if not exists visits (at real)")
+    DB::Main.execute("insert into visits values (?)", Time.now)
+
     Response.json({
       "tenant" => Env.tenant,
       "node" => Env.node,
+      "writer" => Env.writer?,
       "path" => req.path,
-      "time" => Time.now,
-      "roll" => Random.rand(6) + 1
+      "visits" => DB::Main.query("select count(*) as n from visits")[0]["n"]
     })
   }
 RUBY
@@ -42,8 +49,12 @@ namespace :dev do
   task :tenant do
     dir = File.join(ENV.fetch("WORKERS_APP_DIR", "app"), "hello")
     mkdir_p dir
-    File.write(File.join(dir, "app.json"), "{}\n")
+    File.write(File.join(dir, "app.json"), SAMPLE_MANIFEST)
     File.write(File.join(dir, "main.rb"), SAMPLE_TENANT)
+
+    # The database mount is the operator's to provide; outside a container it
+    # is an ordinary directory the Host writes tenant databases into.
+    mkdir_p ENV.fetch("WORKERS_DB_DIR", "db")
   end
 end
 

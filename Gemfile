@@ -8,6 +8,7 @@ source "https://rubygems.org"
 gem "kobako", "~> 0.21.1"
 
 gem "puma", "~> 8.0"
+gem "sqlite3", "~> 2.9"
 gem "sinatra", "~> 4.2"
 
 group :development do

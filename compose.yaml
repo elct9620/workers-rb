@@ -3,8 +3,18 @@ services:
     build: .
     ports:
       - "9292:9292"
+    environment:
+      # One node, so it is the one that may write. A replica carries this as
+      # false and reaches the Writer instead.
+      WORKERS_WRITER: "true"
     volumes:
       # Tenants are published by placing files, so the directory is mounted
       # rather than baked in: an edit here reaches the next request.
       # `rake dev:tenant` writes a sample one.
       - ./app:/app:ro
+      # Stands in for the replicated filesystem the cluster mounts. Tenant
+      # databases outlive the container.
+      - databases:/data
+
+volumes:
+  databases:
