@@ -23,6 +23,28 @@ namespace :wasm do
   task fetch: GUEST_BINARY
 end
 
+SAMPLE_TENANT = <<~'RUBY'
+  App = ->(request) {
+    body = JSON.generate(
+      "tenant" => request.script_name,
+      "path" => request.path,
+      "time" => Time.now,
+      "roll" => Random.rand(6) + 1
+    )
+    [200, { "content-type" => "application/json" }, [body]]
+  }
+RUBY
+
+namespace :dev do
+  desc "Write a sample tenant into the directory the Host serves"
+  task :tenant do
+    dir = File.join(ENV.fetch("WORKERS_APP_DIR", "app"), "hello")
+    mkdir_p dir
+    File.write(File.join(dir, "app.json"), "{}\n")
+    File.write(File.join(dir, "main.rb"), SAMPLE_TENANT)
+  end
+end
+
 Rake::TestTask.new do |task|
   task.libs << "lib" << "test"
   task.test_files = FileList["test/**/*_test.rb"]
