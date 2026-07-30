@@ -4,19 +4,11 @@ require "test_helper"
 
 # What a Tenant's failure looks like from outside: a status that says whether
 # retrying could help, a name for what went wrong, and nothing about the Host.
-class FailureTest < Minitest::Test
-  include Rack::Test::Methods
-
+class FailureTest < TestHelper::Case
   # Small enough that exhausting them is quick; the Host applies one set to
   # every Tenant either way.
   TIGHT = Workers::Runtime.default(guest_binary: Workers.default_guest_binary)
                           .with(timeout: 0.5, memory_limit: 1024 * 1024)
-
-  def app
-    Workers::Host.set :app_dir, TestHelper::FIXTURE_APP_DIR
-    Workers::Host.set :runtime, @runtime || Workers::Runtime.default
-    Workers::Host
-  end
 
   def test_a_manifest_that_is_not_json_leaves_the_tenant_unroutable
     get "/badjson"
@@ -55,21 +47,21 @@ class FailureTest < Minitest::Test
   end
 
   def test_exhausting_the_time_limit_is_a_timeout
-    @runtime = TIGHT
+    Workers::Host.set :runtime, TIGHT
     get "/hog"
 
     assert_failure 503, "timeout"
   end
 
   def test_exhausting_the_memory_limit_is_a_memory_limit
-    @runtime = TIGHT
+    Workers::Host.set :runtime, TIGHT
     get "/glutton"
 
     assert_failure 503, "memory_limit"
   end
 
   def test_a_trapped_sandbox_is_replaced_rather_than_dispatched_into_again
-    @runtime = TIGHT
+    Workers::Host.set :runtime, TIGHT
 
     # A Sandbox kept after a trap is unusable, and the next dispatch into it
     # reports corruption. Trapping the same way twice is what a rebuilt one
@@ -80,7 +72,7 @@ class FailureTest < Minitest::Test
   end
 
   def test_a_trap_leaves_the_other_tenants_answering
-    @runtime = TIGHT
+    Workers::Host.set :runtime, TIGHT
     get "/hog"
 
     assert_equal 503, last_response.status
@@ -88,6 +80,35 @@ class FailureTest < Minitest::Test
     get "/hello"
 
     assert_equal 200, last_response.status
+  end
+
+  # A shared directory the Host cannot read is not a directory where nothing
+  # was published. Answering 404 would say the endpoint is gone, when what is
+  # gone is the Host's reach.
+  def test_an_unreadable_shared_directory_answers_503_rather_than_404
+    skip_as_superuser
+
+    serving("served") do |root|
+      File.chmod(0o000, root)
+
+      get "/served"
+
+      assert_equal 503, last_response.status
+    end
+  end
+
+  def test_a_cached_sandbox_does_not_serve_while_the_shared_directory_is_unreadable
+    skip_as_superuser
+
+    serving("served") do |root|
+      get "/served"
+      assert_equal 200, last_response.status
+
+      File.chmod(0o000, root)
+      get "/served"
+
+      assert_equal 503, last_response.status
+    end
   end
 
   def test_no_failure_names_a_path_the_host_keeps_its_files_under
@@ -101,6 +122,12 @@ class FailureTest < Minitest::Test
   end
 
   private
+
+  # The superuser reads through any mode bits, so the boundary an unreadable
+  # directory draws does not exist for that user.
+  def skip_as_superuser
+    skip "the superuser reads an unreadable directory" if Process.uid.zero?
+  end
 
   def assert_failure(status, name)
     assert_equal status, last_response.status

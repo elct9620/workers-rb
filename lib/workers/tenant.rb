@@ -1,14 +1,11 @@
 # frozen_string_literal: true
 
-require "json"
-
 module Workers
   # One application unit under the shared directory — a Manifest plus mruby
   # source — and the Sandbox they are loaded into.
   class Tenant
     NAME = /\A[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\z/
     MANIFEST = "app.json"
-    DEFAULT_ENTRYPOINT = "App"
 
     Loaded = Struct.new(:sandbox, :entrypoint)
     private_constant :Loaded
@@ -21,6 +18,11 @@ module Workers
     # it holds is what makes the second request cheaper than the first. One
     # that no longer exists is forgotten instead, so its Sandbox goes with it.
     def self.find(root, name, runtime:)
+      # A shared directory the Host cannot read is not one where nothing was
+      # published, so the question of which Tenant lives here has no answer
+      # yet — and a Sandbox cached from when it could be read must not stand
+      # in for one.
+      raise SourceUnreadable unless File.readable?(root) && File.executable?(root)
       return unless name.match?(NAME)
 
       dir = File.join(root, name)
@@ -80,7 +82,7 @@ module Workers
     # kobako seals the Service registry and snippet table at the first
     # dispatch, so a changed Tenant is rebuilt rather than amended.
     def build
-      manifest = read_manifest
+      manifest = Manifest.parse(read(File.join(@dir, MANIFEST)))
       sandbox = @runtime.sandbox
       sandbox.bind("Env")
       sandbox.bind("Time")
@@ -90,16 +92,7 @@ module Workers
         sandbox.preload(code: read(path), name: snippet_name(path, index))
       end
 
-      Loaded.new(sandbox, manifest.fetch("entrypoint", DEFAULT_ENTRYPOINT).to_sym)
-    end
-
-    def read_manifest
-      manifest = JSON.parse(read(File.join(@dir, MANIFEST)))
-      raise InvalidManifest unless manifest.is_a?(Hash)
-
-      manifest
-    rescue JSON::ParserError
-      raise InvalidManifest
+      Loaded.new(sandbox, manifest.entrypoint.to_sym)
     end
 
     def read(path)

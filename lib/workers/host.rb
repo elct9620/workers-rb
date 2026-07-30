@@ -40,9 +40,11 @@ module Workers
       request.script_name = "/#{name}"
       request.path_info = rest
       tenant.call(request, node: settings.node)
-    rescue InvalidManifest
-      # An unreadable Manifest is not a Tenant, so its endpoints answer as
-      # though nothing were published there.
+    rescue InvalidManifest => e
+      # A Manifest the Host cannot act on is not a Tenant, so its endpoints
+      # answer as though nothing were published there. The operator is the
+      # only one who can fix it, so the reason goes to them and not outward.
+      env["rack.errors"].puts("tenant #{name.inspect} is not routable: #{e.message}")
       halt 404
     rescue SourceUnreadable
       halt 503
