@@ -47,7 +47,10 @@ module Workers
       # only one who can fix it, so the reason goes to them and not outward.
       env["rack.errors"].puts("tenant #{name.inspect} is not routable: #{e.message}")
       halt 404
-    rescue SourceUnreadable
+    rescue SourceUnreadable => e
+      # The Tenant published nothing wrong; this Host cannot reach what it
+      # published. Only the operator can act on that, and only if told.
+      env["rack.errors"].puts("cannot read #{e.message}")
       halt 503
     rescue StandardError => e
       failure = Failure.for(e)

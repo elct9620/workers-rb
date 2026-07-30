@@ -127,6 +127,31 @@ class DatabaseTest < TestHelper::Case
     end
   end
 
+  # Reaching the database at all is the Host's side of the contract. The
+  # caller learns nothing it could act on, so the operator has to.
+  def test_a_mount_the_host_cannot_open_is_recorded_for_the_operator
+    Workers::Host.set :databases, Workers::Databases.new(root: "/no/such/mount")
+
+    serving("stranded", manifest: MAIN, source: <<~RUBY) do
+      App = ->(env) { DB::Main.query("select 1") }
+    RUBY
+      get "/stranded"
+
+      assert_includes recorded, "/no/such/mount/stranded-main.db"
+      refute_includes last_response.body, "/no/such/mount"
+    end
+  end
+
+  # The other side of that line: a statement the Tenant wrote is the Tenant's
+  # to fix, and an operator paged for it would be paged for nothing.
+  def test_a_statement_the_tenant_got_wrong_is_not_the_operators_to_see
+    answering('DB::Main.query("select * from nowhere")', manifest: MAIN) do
+      refute_nil body["error"]
+
+      assert_empty recorded
+    end
+  end
+
   private
 
   # A Worker that answers with whatever the statements evaluated to, or with
@@ -160,4 +185,6 @@ class DatabaseTest < TestHelper::Case
 
     JSON.parse(last_response.body)
   end
+
+  def recorded = last_request.env["rack.errors"].string
 end

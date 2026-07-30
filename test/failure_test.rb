@@ -97,6 +97,19 @@ class FailureTest < TestHelper::Case
     end
   end
 
+  def test_an_unreadable_shared_directory_is_recorded_for_the_operator
+    skip_as_superuser
+
+    serving("served") do |root|
+      File.chmod(0o000, root)
+
+      get "/served"
+
+      assert_includes last_request.env["rack.errors"].string, root
+      refute_includes last_response.body, root
+    end
+  end
+
   def test_a_cached_sandbox_does_not_serve_while_the_shared_directory_is_unreadable
     skip_as_superuser
 

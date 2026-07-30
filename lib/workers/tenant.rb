@@ -36,7 +36,7 @@ module Workers
     # published, and a Sandbox cached from when it could be read must not
     # stand in for one.
     def self.absent(root, dir)
-      raise SourceUnreadable unless File.readable?(root) && File.executable?(root)
+      raise SourceUnreadable, root unless File.readable?(root) && File.executable?(root)
 
       forget(dir)
     end
@@ -70,8 +70,9 @@ module Workers
     # one.
     def call(rack_request, node:, databases:)
       loaded = current
+      errors = rack_request.env["rack.errors"]
       supplied = loaded.databases.to_h { |constant, identifier|
-        [ constant, databases.for(@name, identifier) ]
+        [ constant, databases.for(@name, identifier, errors: errors) ]
       }
 
       triplet = loaded.sandbox.run(loaded.entrypoint, Environment.for(rack_request)) do |context|
@@ -129,7 +130,7 @@ module Workers
     def read(path)
       File.read(path)
     rescue SystemCallError
-      raise SourceUnreadable
+      raise SourceUnreadable, path
     end
 
     # The Worker's contract, checked before the triplet reaches the HTTP layer.

@@ -14,8 +14,8 @@ module Workers
 
     # The Binding for one Tenant's database. Nothing is opened here — the file
     # is reached on the first statement run against it.
-    def for(tenant, identifier)
-      Guest::Database.new(File.join(root, "#{tenant}-#{identifier}.db"))
+    def for(tenant, identifier, errors: nil)
+      Guest::Database.new(File.join(root, "#{tenant}-#{identifier}.db"), errors: errors)
     end
   end
 end

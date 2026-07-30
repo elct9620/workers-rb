@@ -60,8 +60,9 @@ module Workers
 
       reachable :query, :execute
 
-      def initialize(path)
+      def initialize(path, errors: nil)
         @path = path
+        @errors = errors
       end
 
       # An Array of rows, each a Hash of column name to value.
@@ -96,6 +97,13 @@ module Workers
       def connection
         @connection ||= SQLite3::Database.new(@path, results_as_hash: true)
                                          .tap { |db| db.busy_timeout = BUSY_TIMEOUT }
+      rescue SQLite3::Exception => e
+        # Reaching the database at all is the Host's side of the contract, so
+        # this failure is the operator's to see — a statement the Tenant got
+        # wrong is not, and never reaches here. What the guest gets is
+        # unchanged either way.
+        @errors&.puts("cannot open #{@path}: #{e.message}")
+        raise
       end
     end
 
