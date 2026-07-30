@@ -117,6 +117,38 @@ class HostTest < Minitest::Test
     end
   end
 
+  def test_concurrent_requests_to_one_tenant_each_carry_their_own_bindings
+    app # settle the settings this thread's requests will read
+
+    paths = 8.times.map { |n|
+      Thread.new { Rack::MockRequest.new(Workers::Host).get("/surface/req#{n}") }
+    }.map { |thread| JSON.parse(thread.value.body)["path"] }
+
+    assert_equal (0...8).map { |n| "/req#{n}" }, paths
+  end
+
+  def test_a_removed_tenant_stops_being_routable_and_lets_its_sandbox_go
+    Dir.mktmpdir do |root|
+      @app_dir = root
+      tenant = File.join(root, "ephemeral")
+      FileUtils.mkdir_p(tenant)
+      File.write(File.join(tenant, "app.json"), "{}")
+      write_worker(tenant, "here")
+
+      get "/ephemeral"
+      assert_equal 200, last_response.status
+
+      FileUtils.rm_rf(tenant)
+      get "/ephemeral"
+      assert_equal 404, last_response.status
+
+      # A released Sandbox has no outward sign, so the assertion reads the
+      # registry that would otherwise keep it alive.
+      registry = Workers::Tenant.const_get(:REGISTRY, false)
+      assert_empty registry.select { |(dir, _), _| dir.start_with?(root) }
+    end
+  end
+
   private
 
   def write_worker(dir, body)

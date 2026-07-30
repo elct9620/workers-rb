@@ -11,6 +11,10 @@ module Workers
   end
 end
 
+# Defined above the requires because `Host` reads the default while its class
+# body runs.
+require_relative "workers/failure"
 require_relative "workers/guest"
+require_relative "workers/runtime"
 require_relative "workers/tenant"
 require_relative "workers/host"

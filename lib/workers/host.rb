@@ -7,7 +7,9 @@ module Workers
   # Tenant and hands back what that Tenant's Worker returned, unchanged.
   class Host < Sinatra::Base
     set :app_dir, ENV.fetch("WORKERS_APP_DIR", "app")
-    set :guest_binary, ENV.fetch("WORKERS_GUEST_BINARY", Workers.default_guest_binary)
+    set :runtime, Runtime.default(
+      guest_binary: ENV.fetch("WORKERS_GUEST_BINARY", Workers.default_guest_binary)
+    )
 
     # A Tenant reaches the cluster under a domain it declares for itself, so
     # the set of hostnames the Host answers to is not knowable in advance and
@@ -31,12 +33,23 @@ module Workers
 
     def dispatch
       name, rest = split_path
-      tenant = Tenant.find(settings.app_dir, name, guest_binary: settings.guest_binary)
+      tenant = Tenant.find(settings.app_dir, name, runtime: settings.runtime)
       halt 404 unless tenant
 
       request.script_name = "/#{name}"
       request.path_info = rest
       tenant.call(request)
+    rescue InvalidManifest
+      # An unreadable Manifest is not a Tenant, so its endpoints answer as
+      # though nothing were published there.
+      halt 404
+    rescue SourceUnreadable
+      halt 503
+    rescue StandardError => e
+      failure = Failure.for(e)
+      raise unless failure
+
+      failure.to_response
     end
 
     # Rack's SCRIPT_NAME / PATH_INFO convention: the segment that routed here
