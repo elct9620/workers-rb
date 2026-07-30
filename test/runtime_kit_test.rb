@@ -6,14 +6,7 @@ require "json"
 # The mruby helpers every Sandbox carries: what a Worker may lean on without
 # the Host having handed it anything, and what happens when a Tenant would
 # rather define the name itself.
-class RuntimeKitTest < Minitest::Test
-  include Rack::Test::Methods
-
-  def app
-    Workers::Host.set :app_dir, TestHelper::FIXTURE_APP_DIR
-    Workers::Host
-  end
-
+class RuntimeKitTest < TestHelper::Case
   def test_the_kit_shapes_a_plain_text_response
     get "/kit/text"
 

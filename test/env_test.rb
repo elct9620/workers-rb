@@ -7,15 +7,7 @@ require "socket"
 # What an invocation knows about where it is running: the Node that executed
 # it, whether that Node may write, the Tenant it belongs to, and an identity
 # for this request alone.
-class EnvTest < Minitest::Test
-  include Rack::Test::Methods
-
-  def app
-    Workers::Host.set :app_dir, TestHelper::FIXTURE_APP_DIR
-    Workers::Host.set :node, @node || Workers::Node.current
-    Workers::Host
-  end
-
+class EnvTest < TestHelper::Case
   def test_the_node_a_host_runs_on_is_the_one_the_operating_system_reports
     assert_equal Socket.gethostname, Workers::Node.current.name
   end
@@ -26,13 +18,13 @@ class EnvTest < Minitest::Test
   end
 
   def test_env_reports_the_node_that_executed_the_invocation
-    @node = Workers::Node.new(name: "node-elsewhere", writer: false)
+    Workers::Host.set :node, Workers::Node.new(name: "node-elsewhere", writer: false)
 
     assert_equal "node-elsewhere", body["node"]
   end
 
   def test_env_reports_whether_that_node_may_write
-    @node = Workers::Node.new(name: "node-writer", writer: true)
+    Workers::Host.set :node, Workers::Node.new(name: "node-writer", writer: true)
 
     assert_equal true, body["writer"]
   end

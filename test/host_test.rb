@@ -1,18 +1,9 @@
 # frozen_string_literal: true
 
 require "test_helper"
-require "fileutils"
 require "json"
-require "tmpdir"
 
-class HostTest < Minitest::Test
-  include Rack::Test::Methods
-
-  def app
-    Workers::Host.set :app_dir, @app_dir || TestHelper::FIXTURE_APP_DIR
-    Workers::Host
-  end
-
+class HostTest < TestHelper::Case
   def test_path_form_routes_to_the_tenant_named_by_the_first_segment
     get "/hello"
 
@@ -102,25 +93,18 @@ class HostTest < Minitest::Test
   end
 
   def test_editing_a_tenant_serves_the_change_on_the_next_request
-    Dir.mktmpdir do |root|
-      @app_dir = root
-      tenant = File.join(root, "mutable")
-      FileUtils.mkdir_p(tenant)
-      File.write(File.join(tenant, "app.json"), "{}")
-      write_worker(tenant, "first")
-
+    serving("mutable", body: "first") do |root|
       get "/mutable"
       assert_equal "first", last_response.body
 
-      write_worker(tenant, "second")
+      publish(root, "mutable", body: "second")
       get "/mutable"
+
       assert_equal "second", last_response.body
     end
   end
 
   def test_concurrent_requests_to_one_tenant_each_carry_their_own_bindings
-    app # settle the settings this thread's requests will read
-
     paths = 8.times.map { |n|
       Thread.new { Rack::MockRequest.new(Workers::Host).get("/surface/req#{n}") }
     }.map { |thread| JSON.parse(thread.value.body)["path"] }
@@ -129,17 +113,11 @@ class HostTest < Minitest::Test
   end
 
   def test_a_removed_tenant_stops_being_routable_and_lets_its_sandbox_go
-    Dir.mktmpdir do |root|
-      @app_dir = root
-      tenant = File.join(root, "ephemeral")
-      FileUtils.mkdir_p(tenant)
-      File.write(File.join(tenant, "app.json"), "{}")
-      write_worker(tenant, "here")
-
+    serving("ephemeral") do |root|
       get "/ephemeral"
       assert_equal 200, last_response.status
 
-      FileUtils.rm_rf(tenant)
+      FileUtils.rm_rf(File.join(root, "ephemeral"))
       get "/ephemeral"
       assert_equal 404, last_response.status
 
@@ -148,13 +126,5 @@ class HostTest < Minitest::Test
       registry = Workers::Tenant.const_get(:REGISTRY, false)
       assert_empty(registry.select { |(dir, _), _| dir.start_with?(root) })
     end
-  end
-
-  private
-
-  def write_worker(dir, body)
-    File.write(File.join(dir, "main.rb"), <<~RUBY)
-      App = ->(request) { [200, { "content-type" => "text/plain" }, ["#{body}"]] }
-    RUBY
   end
 end
