@@ -344,7 +344,7 @@ Calls to methods outside these tables are refused per B-16.
 
 | Binding | Method | Returns |
 |---------|--------|---------|
-| Request | `method` | The HTTP method as a String |
+| Request | `request_method` | The HTTP method as a String |
 | Request | `script_name` | The path prefix that routed to this Tenant, as a String |
 | Request | `path` | The remainder of the request path, as a String |
 | Request | `query` | A Hash of query parameters |
@@ -379,7 +379,7 @@ The Runtime Kit defines `Req` and `Res`, and nothing else.
 | Constant | Call | Result |
 |----------|------|--------|
 | `Req` | `.new(request)` | Wraps the Request the Worker received; each field is read once and cached inside the Sandbox |
-| `Req` | `#method` `#script_name` `#path` `#query` `#headers` `#body` | The same value as the Request field of that name |
+| `Req` | `#request_method` `#script_name` `#path` `#query` `#headers` `#body` | The same value as the Request field of that name |
 | `Res` | `.text(body, status:, headers:)` | A Rack triplet with `content-type: text/plain; charset=utf-8` |
 | `Res` | `.json(data, status:, headers:)` | A Rack triplet with `content-type: application/json`, its body the JSON form of `data` |
 | `Res` | `.status(code, body)` | A Rack triplet with `content-type: text/plain; charset=utf-8` |
@@ -410,6 +410,7 @@ A database file is `<tenant>-<database identifier>.db` at the root of the replic
 | Situation | Approach |
 |-----------|----------|
 | Any Host object supplied into a Sandbox | Narrow the methods tenant code may call to an allow list; methods outside it are invisible by default |
+| Any method name on a guest-reachable surface | Keep it clear of Ruby's ambient reflection surface — `method`, `send`, `class` and their kin are refused before any allow list is read |
 | Any Binding that varies per request | Declare it pending when the Sandbox is built and supply it per invocation; an unsupplied call fails rather than falling back to a shared object |
 | Any change to a Tenant's files | Discard and rebuild that Tenant's Sandbox rather than updating it in part |
 | Any routing ambiguity | Treat it as not routable rather than guessing the target Tenant |
