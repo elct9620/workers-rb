@@ -57,7 +57,7 @@ These roles constitute the system. Later layers use these names exclusively.
 | **Tenant** | One application unit under the shared directory (`/app/<tenant>/`), consisting of a Manifest and mruby source | In scope |
 | **Manifest** | `/app/<tenant>/app.json` — declares the tenant's entrypoint, external domain form, and Bindings | In scope |
 | **Worker** | The entrypoint constant defined by a Tenant's mruby source; accepts one Request and returns a Rack response triplet | In scope |
-| **Binding** | A named Host object supplied into the Sandbox — either `Env` or `DB` — and tenant code's only path outward | In scope |
+| **Binding** | A named Host object supplied into the Sandbox — `Env`, `DB`, `Time`, or `Random` — and tenant code's only path outward | In scope |
 | **Runtime Kit** | mruby helper objects the Host loads into every Sandbox, present regardless of Tenant files | In scope |
 | **Node** | A cluster node running one Host instance; exactly one Node in the cluster is the SQLite Writer | In scope |
 | **Sandbox** | kobako's mruby execution unit; the Host holds one per Tenant and serves requests through successive invocations | kobako semantics, referenced |
@@ -78,7 +78,7 @@ These roles constitute the system. Later layers use these names exclusively.
 - Hold, per Tenant, a Sandbox loaded with the Runtime Kit and that Tenant's source, and rebuild it after its files change
 - Supply `Env` and each `DB` Binding declared in the Manifest for the duration of one invocation
 - Create a declared Binding's database file when it does not exist, and open it for the invocation
-- Give the Sandbox the real clock and real randomness
+- Supply the `Time` and `Random` Bindings, which read the Host's clock and entropy
 - Pass a Request as the Worker's only argument and hand the returned triplet to the HTTP layer
 - Narrow every Binding's guest-reachable method surface to an explicit allow list
 - Turn a Tenant's execution failure into an HTTP error response for that request
@@ -108,7 +108,7 @@ These roles constitute the system. Later layers use these names exclusively.
 #### Control — what the Host controls / depends on
 
 - **Controls:** route resolution, Sandbox lifecycle, the content and method surface of each Binding, the creation of each Binding's database file, and the mapping from failure to HTTP status
-- **Depends on:** kobako's isolation and error classification, the Sandbox's mruby build providing JSON generation and Regexp, the replicated filesystem's single-Writer semantics and asynchronous replication, the readability of shared storage, the hostname the operating system reports for this Node, Node-to-Node reachability inside the cluster, and the tunnel service's external connectivity
+- **Depends on:** kobako's isolation and error classification, the Sandbox's mruby build providing JSON generation and ASCII Regexp, the replicated filesystem's single-Writer semantics and asynchronous replication, the readability of shared storage, the hostname the operating system reports for this Node, Node-to-Node reachability inside the cluster, and the tunnel service's external connectivity
 
 ### Feature List
 
@@ -181,12 +181,12 @@ These roles constitute the system. Later layers use these names exclusively.
 
 | ID | State + Operation | Result |
 |----|-------------------|--------|
-| B-09 | A Tenant is routed to for the first time | The Host creates a Sandbox, loads the Runtime Kit and that Tenant's `*.rb`, declares `Env` and each Manifest Binding as pending, then dispatches the entrypoint |
+| B-09 | A Tenant is routed to for the first time | The Host creates a Sandbox, loads the Runtime Kit and that Tenant's `*.rb`, declares `Env`, `Time`, `Random`, and each Manifest Binding as pending, then dispatches the entrypoint |
 | B-10 | The Tenant has a Sandbox and its files are unchanged | That Sandbox serves the dispatch; source is not reloaded |
 | B-11 | The Tenant's files have changed | The Tenant's Sandbox is discarded and rebuilt per B-09, then dispatched |
 | B-12 | Concurrent requests to one Tenant | They share that Tenant's Sandbox; each invocation holds its own Bindings, output captures, and resource usage |
 | B-13 | Any invocation ends | That invocation's supplied Bindings and output captures end with it and do not carry into the next |
-| B-14 | Tenant code reads the clock or draws a random number | It obtains the real clock and real randomness; environment variables, filesystem paths, and network connections stay unreachable |
+| B-14 | Tenant code reads the clock or draws a random number | The `Time` and `Random` Bindings supply them from the Host's clock and entropy; environment variables, filesystem paths, and network connections stay unreachable |
 
 ### F-04 — Env Binding
 
@@ -217,7 +217,7 @@ These roles constitute the system. Later layers use these names exclusively.
 | B-27 | Every Sandbox | The Runtime Kit loads before the Tenant's `*.rb`, so tenant code may use its constants at the top level |
 | B-28 | Tenant code uses the Runtime Kit | It reads the Request as named fields and builds a Rack response triplet as plain text, as JSON, or with a chosen status code |
 | B-29 | Tenant code returns a triplet directly without the Runtime Kit | Equally valid; the Host's handling is unchanged |
-| B-30 | A Tenant's `*.rb` defines a constant that the Runtime Kit also defines | The Tenant's definition takes effect |
+| B-30 | A Tenant's `*.rb` defines a constant that the Runtime Kit or a Binding also defines | The Tenant's definition takes effect, and that Tenant's code no longer reaches what the name held before |
 
 ### F-07 — Failure containment and response mapping
 
@@ -269,7 +269,7 @@ These roles constitute the system. Later layers use these names exclusively.
 | **Tenant** | One application unit under the shared directory, identified by its directory name |
 | **Manifest** | `/app/<tenant>/app.json` |
 | **Worker** | The callable that the entrypoint constant named by the Manifest refers to |
-| **Binding** | A named Host object supplied into a Sandbox. `Env` carries node and request information; `DB::*` carries a SQLite database |
+| **Binding** | A named Host object supplied into a Sandbox. `Env` carries node and request information; `DB::*` carries a SQLite database; `Time` carries the Host's clock; `Random` carries the Host's entropy |
 | **Runtime Kit** | The mruby helper objects the Host loads into every Sandbox |
 | **Node** | A cluster node running one Host |
 | **Writer** | The single Node that may write SQLite, designated by configuration |
@@ -317,9 +317,9 @@ Every field is optional; an empty object is a valid Manifest. `bindings` appears
 |------|------------------|--------|
 | Tenant name — the directory name | `a`–`z`, `0`–`9`, `-`; neither leading nor trailing `-` | 1–63 |
 | Database identifier | `a`–`z`, `0`–`9`, `_` | 1–32 |
-| Binding constant name | `DB::` followed by an uppercase letter and further letters, digits, or `_` | 1–64 after `DB::` |
+| Manifest Binding constant name | `DB::` followed by an uppercase letter and further letters, digits, or `_` | 1–64 after `DB::` |
 
-A Binding constant lives under `DB::`, so a Manifest declaration reaches no constant the Runtime Kit or the Tenant defines at the top level.
+A Manifest-declared Binding constant lives under `DB::`, so a Manifest declaration reaches no constant the Runtime Kit or the Tenant defines at the top level.
 
 #### Worker entrypoint
 
@@ -356,6 +356,8 @@ Calls to methods outside these tables are refused per B-16.
 | `Env` | `request_id` | This request's identity as a String, distinct from that of every other request the Host serves |
 | `DB::*` | `query(sql, *params)` | An Array of rows, each a Hash of column name to value |
 | `DB::*` | `execute(sql, *params)` | The affected row count |
+| `Time` | `now` | The current Unix time in seconds, as a Float |
+| `Random` | `rand(limit = nil)` | An Integer in `0...limit`, or a Float in `0.0...1.0` when `limit` is omitted |
 
 A row's values reach tenant code as Integer, Float, String, or nil.
 
