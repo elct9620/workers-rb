@@ -21,7 +21,7 @@ workers-rb builds a self-hostable, multi-tenant edge function platform on kobako
 | Publish by placing files | After a tenant author adds `/app/<tenant>/` to the shared directory, that tenant's endpoint serves requests without a Host restart or redeploy |
 | Sandbox isolation | Tenant code cannot read the Host's environment variables, filesystem, or network; the Bindings the Host supplies are its only path outward |
 | Data binding | A tenant declares multiple SQLite Bindings in its Manifest and reads and writes them through named constants, and cannot reach another tenant's databases |
-| Node visibility | The same request to the same tenant reads a different `Env.node` on different nodes, while its Binding reads and writes yield identical results |
+| Node visibility | The same request to the same tenant reads a different `Env.node` on different nodes, while its Binding reads converge on identical results |
 | Failure containment | An exception, timeout, or memory exhaustion in tenant code affects only that request; the Host process and other tenants' requests are unaffected |
 | Rack compatibility | Tenant code returns a Rack response triplet, which the Host hands to the HTTP layer without semantic translation |
 
@@ -32,8 +32,8 @@ workers-rb builds a self-hostable, multi-tenant edge function platform on kobako
 | Publishing needs no restart | Adding a tenant directory to a running Host makes `GET https://<domain>/<tenant>` respond 200 |
 | The sandbox is closed | Tenant code's attempts to reach environment variables, the filesystem, and the network all fail, and the failures disclose no Host environment content |
 | Tenants are isolated from each other | Tenant A's code cannot obtain any Binding declared by tenant B |
-| Cross-node results agree | Across consecutive requests served by different nodes, `Env.node` differs while a query against the same Binding returns the same result |
-| Writes work from every node | A request served by any node writes to its Binding successfully, and the write is visible to subsequent requests |
+| Cross-node results converge | Across consecutive requests served by different nodes, `Env.node` differs while queries against the same Binding converge on the same result |
+| Writes work from every node | A request served by any node writes to its Binding successfully, and the write is visible to subsequent requests on the node that served it |
 | Failures do not spread | While tenant code loops forever, that request ends 5xx and other tenants' requests keep responding normally |
 
 ### Non-Goals
@@ -42,6 +42,7 @@ workers-rb builds a self-hostable, multi-tenant edge function platform on kobako
 - A control-plane API and tenant authentication — the shared directory is the only deployment interface
 - Bindings other than SQLite (KV, object storage, queues, durable objects)
 - Schema definition and migration for tenant databases — tenant code creates its own tables
+- Strongly consistent reads across Nodes — replication to non-Writer Nodes is asynchronous
 - An online editor, version management, or rollback for tenant code
 - Tenant runtimes other than mruby
 - Reimplementing or wrapping kobako's sandbox semantics — kobako provides the isolation guarantees
@@ -56,7 +57,7 @@ These roles constitute the system. Later layers use these names exclusively.
 | **Tenant** | One application unit under the shared directory (`/app/<tenant>/`), consisting of a Manifest and mruby source | In scope |
 | **Manifest** | `/app/<tenant>/app.json` — declares the tenant's entrypoint, external domain form, and Bindings | In scope |
 | **Worker** | The entrypoint constant defined by a Tenant's mruby source; accepts one Request and returns a Rack response triplet | In scope |
-| **Binding** | A named Service supplied into the Sandbox — either `Env` or `DB` — and tenant code's only path outward | In scope |
+| **Binding** | A named Host object supplied into the Sandbox — either `Env` or `DB` — and tenant code's only path outward | In scope |
 | **Runtime Kit** | mruby helper objects the Host loads into every Sandbox, present regardless of Tenant files | In scope |
 | **Node** | A cluster node running one Host instance; exactly one Node in the cluster is the SQLite Writer | In scope |
 | **Sandbox** | kobako's mruby execution unit; the Host holds one per Tenant and serves requests through successive invocations | kobako semantics, referenced |
@@ -95,7 +96,7 @@ These roles constitute the system. Later layers use these names exclusively.
 **Input assumptions:**
 
 - The shared directory sits on a filesystem every Node mounts; a change made through any Node's mount becomes visible through every other Node's mount. Tenant directories are added and modified by processes outside the Host
-- SQLite database files sit on a replicated filesystem mount that every Node carries, with single-Writer semantics and cross-Node read-after-write visibility
+- SQLite database files sit on a replicated filesystem mount that every Node carries, with single-Writer semantics and asynchronous replication from the Writer to every other Node
 - External traffic reaches an internal cluster service through a tunnel service; the Host is not exposed to the public network directly
 
 **Output guarantees:**
@@ -107,7 +108,7 @@ These roles constitute the system. Later layers use these names exclusively.
 #### Control — what the Host controls / depends on
 
 - **Controls:** route resolution, Sandbox lifecycle, the content and method surface of each Binding, the creation of each Binding's database file, and the mapping from failure to HTTP status
-- **Depends on:** kobako's isolation and error classification, the Sandbox's mruby build providing JSON generation and Regexp, the replicated filesystem's single-Writer semantics and cross-Node read-after-write visibility, the readability of shared storage, Node-to-Node reachability inside the cluster, and the tunnel service's external connectivity
+- **Depends on:** kobako's isolation and error classification, the Sandbox's mruby build providing JSON generation and Regexp, the replicated filesystem's single-Writer semantics and asynchronous replication, the readability of shared storage, the hostname the operating system reports for this Node, Node-to-Node reachability inside the cluster, and the tunnel service's external connectivity
 
 ### Feature List
 
@@ -134,13 +135,13 @@ These roles constitute the system. Later layers use these names exclusively.
 
 - **Context:** The Tenant is live
 - **Action:** Declare a Binding in the Manifest, then query and write it from tenant code
-- **Outcome:** The query returns rows and the write is visible to later requests; the code cannot reach a Binding declared by another Tenant
+- **Outcome:** The query returns rows and the write is visible to later requests on the node that served it; the code cannot reach a Binding declared by another Tenant
 
 #### J-03 — A technology evaluator compares cross-node behavior
 
 - **Context:** The cluster has several Nodes and one Tenant is live
 - **Action:** Issue consecutive requests to one endpoint and compare `Env.node` against the Binding query results
-- **Outcome:** `Env.node` tracks the serving Node, queries against the same Binding agree, and writes succeed from any Node
+- **Outcome:** `Env.node` tracks the serving Node, queries against the same Binding converge on the same result, and writes succeed from any Node
 
 #### J-04 — A platform operator deploys the cluster
 
@@ -163,17 +164,17 @@ These roles constitute the system. Later layers use these names exclusively.
 | ID | State + Operation | Result |
 |----|-------------------|--------|
 | B-01 | `/app/<tenant>/app.json` exists and is a valid Manifest + the Host reads it | The Tenant becomes routable, and its entrypoint, domain form, and Binding declarations take effect |
-| B-02 | A directory holds no `app.json` | The directory constitutes no Tenant and is not routable |
+| B-02 | A directory holds no `app.json`, or its name does not satisfy the Tenant name rule | The directory constitutes no Tenant and is not routable |
 | B-03 | A Tenant directory holds several `*.rb` files | All are loaded into one Sandbox in lexicographic filename order, so a later file may reference constants an earlier one defined |
-| B-04 | A Manifest or `*.rb` changes while the Host runs | The next request reaching that Tenant is served by the changed content |
+| B-04 | A Tenant directory is added, changed, or removed while the Host runs | Each request resolves against the shared directory's current content: an added Tenant is routable, changed content serves the next request reaching that Tenant, and a removed Tenant stops being routable and has its Sandbox discarded |
 
 ### F-02 — Request routing
 
 | ID | State + Operation | Result |
 |----|-------------------|--------|
-| B-05 | The request path's first segment equals the Tenant name | Routes to that Tenant; the path the Worker receives has that segment removed |
-| B-06 | The Manifest declares a domain + the request's Host header matches it | Routes to that Tenant; the path is passed through unchanged |
-| B-07 | The Host's base domain is configured + the request's Host header is `<tenant>.<base>` | Routes to that Tenant; the path is passed through unchanged |
+| B-05 | The request path's first segment equals the Tenant name | Routes to that Tenant; the Worker receives that segment as `script_name` and the remainder as `path`, split per Rack's SCRIPT_NAME / PATH_INFO convention |
+| B-06 | The Manifest declares a domain + the request's Host header matches it | Routes to that Tenant; `script_name` is empty and `path` is the full request path |
+| B-07 | The Host's base domain is configured + the request's Host header is `<tenant>.<base>` | Routes to that Tenant; `script_name` is empty and `path` is the full request path |
 | B-08 | A request matches more than one form | Forms are matched in order: the Manifest `domain`, then `<tenant>.<base>`, then the path form |
 
 ### F-03 — Sandbox caching and lifecycle
@@ -191,8 +192,8 @@ These roles constitute the system. Later layers use these names exclusively.
 
 | ID | State + Operation | Result |
 |----|-------------------|--------|
-| B-15 | Every invocation | The Host supplies `Env`, whose surface exposes the executing node's identity, whether that node is the Writer, the Tenant name, and the request identity |
-| B-16 | Tenant code calls a method on `Env` outside the allow list | The call is refused, and the Host's environment variables are not disclosed by it |
+| B-15 | Every invocation | The Host supplies `Env`, whose surface exposes the executing Node's hostname, whether that Node is the Writer, the Tenant name, and the request identity |
+| B-16 | Tenant code calls a method on a Binding outside the allow list | The call raises inside the Sandbox and tenant code may rescue it; left unrescued it ends the request per E-10. The refusal names no Host environment content |
 | B-17 | Requests to one Tenant are served by different Nodes | Each invocation's `Env.node` reflects the Node that executed it |
 
 ### F-05 — DB Binding
@@ -204,9 +205,9 @@ These roles constitute the system. Later layers use these names exclusively.
 | B-20 | Tenant code queries a Binding | Returns an Array of rows, each a Hash of column name to value |
 | B-21 | Tenant code writes to a Binding + the executing node is the Writer | The write completes and returns the affected row count |
 | B-22 | Tenant code writes to a Binding + the executing node is not the Writer | The write is serialized through the Writer and then completes; what tenant code observes is indistinguishable from B-21 |
-| B-23 | A later request queries the same Binding after a write | The query reflects that write, whichever Node serves it |
+| B-23 | A later request queries the same Binding after a write | The query reflects that write immediately on the Node that served the write, and on every other Node once replication arrives; until then those Nodes read the previous value |
 | B-24 | A statement a Tenant executes against a Binding fails in the database | The failure reaches tenant code as an exception it may rescue |
-| B-25 | A Binding constant the Manifest does not declare | Tenant code does not see that constant |
+| B-25 | A Binding constant the Manifest does not declare | The constant does not exist in the Sandbox and referencing it raises `NameError`, which tenant code may rescue and which stays distinguishable from a declared Binding that is not yet supplied |
 | B-26 | A Tenant's Binding constant | Resolves only to a database that Tenant declared |
 
 ### F-06 — Runtime Kit
@@ -224,8 +225,8 @@ These roles constitute the system. Later layers use these names exclusively.
 |----|-------------------|--------|
 | B-31 | The Worker returns a valid Rack response triplet | The Host hands it to the HTTP layer unchanged |
 | B-32 | Any failure in any Tenant | Other Tenants' requests are unaffected and the Host process keeps running |
-| B-33 | A failure caused by the timeout or the memory limit | The Tenant's Sandbox is discarded and the next request rebuilds it per B-09 |
-| B-34 | Any failure response | Carries the failure class, and carries no Host environment variable, filesystem path, or internal address |
+| B-33 | A trap-class failure | The Tenant's Sandbox is discarded and the next request rebuilds it per B-09, and that Tenant's other in-flight invocations end with the same failure class |
+| B-34 | Any failure response | Carries no Host environment variable, filesystem path, or internal address; a failure in tenant execution additionally carries its failure class |
 
 ### F-08 — Deployment topology
 
@@ -242,18 +243,19 @@ These roles constitute the system. Later layers use these names exclusively.
 | ID | Trigger | Response |
 |----|---------|----------|
 | E-01 | Neither the Host header nor the path's first segment matches a Tenant | 404 |
-| E-02 | A Manifest is not a JSON object | The Tenant is not routable and its endpoints answer 404; the Host records the Tenant as invalid |
+| E-02 | A Manifest is not a JSON object, or a field violates its declared shape or naming rule | The Tenant is not routable and its endpoints answer 404; the Host records the Tenant as invalid |
 | E-03 | Two Tenants declare the same domain | Neither is routable and both endpoints answer 404 |
-| E-04 | A Tenant's `*.rb` fails to compile | 500 carrying the failure class |
-| E-05 | No `*.rb` defines the entrypoint constant the Manifest names | 500 listing the top-level constants that are available |
-| E-06 | Tenant code raises an exception it does not rescue | 500 carrying the failure class |
-| E-07 | The Worker's return value is not a valid Rack response triplet | 500 |
+| E-04 | A Tenant's `*.rb` fails to compile | 500 marked as a compile failure |
+| E-05 | No `*.rb` defines the entrypoint constant the Manifest names | 500 marked as an undefined entrypoint, listing the top-level constants the Sandbox defines |
+| E-06 | Tenant code raises an exception it does not rescue | 500 marked as a tenant exception |
+| E-07 | The Worker's return value is not a valid Rack response triplet | 500 marked as an invalid response |
 | E-08 | Tenant code exceeds the timeout | 503 marked as a timeout |
 | E-09 | Tenant code exhausts the memory limit | 503 marked as a memory limit |
-| E-10 | A pending Binding is called before it is supplied | 500 |
-| E-11 | A Binding's database file cannot be created or opened | 500 carrying the failure class |
-| E-12 | A write from a non-Writer node cannot reach the Writer | 500 |
-| E-13 | The shared directory is unreadable | Every Tenant endpoint answers 503 |
+| E-10 | Tenant code leaves a refused Binding call unrescued — a method outside the allow list, or a pending Binding called before it is supplied | 500 marked as a binding failure |
+| E-11 | A Binding's database file cannot be created or opened | 500 marked as a binding failure |
+| E-12 | A write from a non-Writer node cannot reach the Writer | 500 marked as a binding failure |
+| E-13 | The shared directory is unreadable | Every Tenant endpoint answers 503; a cached Sandbox does not serve while the directory is unreadable |
+| E-14 | The Sandbox produces no recognisable result and its execution environment is corrupted | 503 marked as runtime corruption |
 
 ---
 
@@ -267,13 +269,14 @@ These roles constitute the system. Later layers use these names exclusively.
 | **Tenant** | One application unit under the shared directory, identified by its directory name |
 | **Manifest** | `/app/<tenant>/app.json` |
 | **Worker** | The callable that the entrypoint constant named by the Manifest refers to |
-| **Binding** | A named Service supplied into a Sandbox. `Env` carries node and request information; `DB::*` carries a SQLite database |
+| **Binding** | A named Host object supplied into a Sandbox. `Env` carries node and request information; `DB::*` carries a SQLite database |
 | **Runtime Kit** | The mruby helper objects the Host loads into every Sandbox |
 | **Node** | A cluster node running one Host |
 | **Writer** | The single Node that may write SQLite, designated by configuration |
 | **invocation** | One entrypoint call the Host makes into a Sandbox, corresponding to exactly one HTTP request |
-| **failure class** | The category a failure response carries: compile failure, tenant exception, invalid response, timeout, memory limit, or binding failure |
-| **supply** | The Host's act of providing a Binding object for the span of one invocation. A pending Binding that is called before it is supplied fails |
+| **failure class** | The category a failure response carries: compile failure, undefined entrypoint, tenant exception, invalid response, timeout, memory limit, binding failure, or runtime corruption |
+| **trap-class failure** | A failure that leaves the Sandbox unusable: the timeout, the memory limit, or runtime corruption |
+| **supply** | The Host's act of providing a Binding object for the span of one invocation. A pending Binding that is called before it is supplied raises per B-16 |
 
 ### Contracts
 
@@ -290,7 +293,7 @@ The operator supplies these to each Host as environment variables. They are clus
 
 #### Manifest
 
-Every field is optional; an empty object is a valid Manifest. `bindings` appears only when the Tenant needs a database.
+Every field is optional; an empty object is a valid Manifest. `bindings` appears only when the Tenant needs a database. A Manifest carrying a field that violates the shape below, or a name that violates the naming rules, is invalid per E-02.
 
 | Field | Required | Meaning |
 |-------|----------|---------|
@@ -307,6 +310,16 @@ Every field is optional; an empty object is a valid Manifest. `bindings` appears
   }
 }
 ```
+
+#### Names
+
+| Name | Legal characters | Length |
+|------|------------------|--------|
+| Tenant name — the directory name | `a`–`z`, `0`–`9`, `-`; neither leading nor trailing `-` | 1–63 |
+| Database identifier | `a`–`z`, `0`–`9`, `_` | 1–32 |
+| Binding constant name | `DB::` followed by an uppercase letter and further letters, digits, or `_` | 1–64 after `DB::` |
+
+A Binding constant lives under `DB::`, so a Manifest declaration reaches no constant the Runtime Kit or the Tenant defines at the top level.
 
 #### Worker entrypoint
 
@@ -332,18 +345,49 @@ Calls to methods outside these tables are refused per B-16.
 | Binding | Method | Returns |
 |---------|--------|---------|
 | Request | `method` | The HTTP method as a String |
-| Request | `path` | The path as a String, with the Tenant segment removed under path-form routing |
+| Request | `script_name` | The path prefix that routed to this Tenant, as a String |
+| Request | `path` | The remainder of the request path, as a String |
 | Request | `query` | A Hash of query parameters |
 | Request | `headers` | A Hash of request headers |
 | Request | `body` | The request body as a String |
-| `Env` | `node` | The identity of the Node that executed this invocation |
-| `Env` | `writer?` | Whether that Node is the Writer |
-| `Env` | `tenant` | The Tenant name |
-| `Env` | `request_id` | The identity of this request |
+| `Env` | `node` | The executing Node's hostname, as a String |
+| `Env` | `writer?` | Whether that Node is the Writer, as true or false |
+| `Env` | `tenant` | The Tenant name, as a String |
+| `Env` | `request_id` | This request's identity as a String, distinct from that of every other request the Host serves |
 | `DB::*` | `query(sql, *params)` | An Array of rows, each a Hash of column name to value |
 | `DB::*` | `execute(sql, *params)` | The affected row count |
 
 A row's values reach tenant code as Integer, Float, String, or nil.
+
+#### Request path splitting
+
+`script_name` and `path` divide the request path per Rack's SCRIPT_NAME / PATH_INFO convention, so at most one of them is empty.
+
+| Routing form | Request path | `script_name` | `path` |
+|--------------|--------------|---------------|--------|
+| Path form on Tenant `hello` | `/hello` | `/hello` | `""` |
+| Path form on Tenant `hello` | `/hello/` | `/hello` | `/` |
+| Path form on Tenant `hello` | `/hello/items` | `/hello` | `/items` |
+| Host form | `/items` | `""` | `/items` |
+
+#### Runtime Kit
+
+The Runtime Kit defines `Req` and `Res`, and nothing else.
+
+| Constant | Call | Result |
+|----------|------|--------|
+| `Req` | `.new(request)` | Wraps the Request the Worker received; each field is read once and cached inside the Sandbox |
+| `Req` | `#method` `#script_name` `#path` `#query` `#headers` `#body` | The same value as the Request field of that name |
+| `Res` | `.text(body, status:, headers:)` | A Rack triplet with `content-type: text/plain; charset=utf-8` |
+| `Res` | `.json(data, status:, headers:)` | A Rack triplet with `content-type: application/json`, its body the JSON form of `data` |
+| `Res` | `.status(code, body)` | A Rack triplet with `content-type: text/plain; charset=utf-8` |
+
+```ruby
+App = ->(request) {
+  req = Req.new(request)
+  Res.json({ "node" => Env.node, "path" => req.path })
+}
+```
 
 #### Execution limits
 
@@ -357,7 +401,7 @@ One set of limits applies to every Tenant; a Manifest does not alter them.
 
 #### Database file naming
 
-A database file is `<tenant>-<database identifier>.db` at the root of the replicated filesystem mount. The mount holds no subdirectories.
+A database file is `<tenant>-<database identifier>.db` at the root of the replicated filesystem mount. The mount holds no subdirectories. A database identifier carries no `-`, so the last `-` in a filename separates the Tenant name from the identifier and no two Tenants resolve to the same file.
 
 ### Patterns
 
@@ -367,4 +411,5 @@ A database file is `<tenant>-<database identifier>.db` at the root of the replic
 | Any Binding that varies per request | Declare it pending when the Sandbox is built and supply it per invocation; an unsupplied call fails rather than falling back to a shared object |
 | Any change to a Tenant's files | Discard and rebuild that Tenant's Sandbox rather than updating it in part |
 | Any routing ambiguity | Treat it as not routable rather than guessing the target Tenant |
-| Any failure message returned to a tenant or outward | Carry only the failure class and the tenant's own information |
+| Any disagreement between the shared directory and cached Host state | The shared directory governs |
+| Any failure message returned to a tenant or outward | Carry at most the failure class and the tenant's own information |
