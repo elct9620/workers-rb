@@ -141,8 +141,31 @@ class HostTest < TestHelper::Case
 
       # A released Sandbox has no outward sign, so the assertion reads the
       # registry that would otherwise keep it alive.
-      registry = Workers::Tenant.const_get(:REGISTRY, false)
       assert_empty(registry.select { |(dir, _), _| dir.start_with?(root) })
     end
   end
+
+  # A Tenant nobody asks for again is never reached, so nothing would evict it
+  # on its own. The bound is what keeps a long-lived Host from holding every
+  # Sandbox it ever built.
+  def test_the_host_holds_no_more_sandboxes_than_its_bound_allows
+    cap = Workers::Tenant::CACHED
+    runtime = Workers::Runtime.default
+
+    serving("eldest") do |root|
+      Workers::Tenant.find(root, "eldest", runtime: runtime)
+
+      cap.times do |n|
+        publish(root, "filler#{n}")
+        Workers::Tenant.find(root, "filler#{n}", runtime: runtime)
+      end
+
+      assert_operator registry.size, :<=, cap
+      refute_includes registry.keys.map(&:first), File.join(root, "eldest")
+    end
+  end
+
+  private
+
+  def registry = Workers::Tenant.const_get(:REGISTRY, false)
 end

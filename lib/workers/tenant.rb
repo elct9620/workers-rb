@@ -15,27 +15,48 @@ module Workers
     private_constant :REGISTRY, :REGISTRY_LOCK
 
     # A Tenant outlives the request that first reached it, because the Sandbox
-    # it holds is what makes the second request cheaper than the first. One
-    # that no longer exists is forgotten instead, so its Sandbox goes with it.
+    # it holds is what makes the second request cheaper than the first. The
+    # Host keeps a bounded number of them, least recently reached first out: a
+    # shared directory that has held many Tenants over a Host's life would
+    # otherwise accumulate every Sandbox it ever built.
+    CACHED = 64
+
     def self.find(root, name, runtime:)
-      # A shared directory the Host cannot read is not one where nothing was
-      # published, so the question of which Tenant lives here has no answer
-      # yet — and a Sandbox cached from when it could be read must not stand
-      # in for one.
-      raise SourceUnreadable unless File.readable?(root) && File.executable?(root)
       return unless name.match?(NAME)
 
       dir = File.join(root, name)
-      return forget(dir) unless File.file?(File.join(dir, MANIFEST))
+      return absent(root, dir) unless File.file?(File.join(dir, MANIFEST))
 
-      REGISTRY_LOCK.synchronize { REGISTRY[[ dir, runtime ]] ||= new(dir, runtime: runtime) }
+      REGISTRY_LOCK.synchronize { remember([ dir, runtime ]) { new(dir, runtime: runtime) } }
     end
+
+    # Reached only when no Manifest answers, so the two questions the Host
+    # cannot otherwise tell apart are asked where the answer matters and
+    # nowhere else: a directory it cannot read is not one where nothing was
+    # published, and a Sandbox cached from when it could be read must not
+    # stand in for one.
+    def self.absent(root, dir)
+      raise SourceUnreadable unless File.readable?(root) && File.executable?(root)
+
+      forget(dir)
+    end
+    private_class_method :absent
 
     def self.forget(dir)
       REGISTRY_LOCK.synchronize { REGISTRY.delete_if { |(cached, _), _| cached == dir } }
       nil
     end
     private_class_method :forget
+
+    # Ruby's Hash keeps insertion order, so re-inserting on every reach leaves
+    # the oldest entry the least recently reached one.
+    def self.remember(key)
+      tenant = REGISTRY.delete(key) || yield
+      REGISTRY[key] = tenant
+      REGISTRY.shift while REGISTRY.size > CACHED
+      tenant
+    end
+    private_class_method :remember
 
     def initialize(dir, runtime:)
       @dir = dir
