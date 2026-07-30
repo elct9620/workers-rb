@@ -1,0 +1,10 @@
+services:
+  host:
+    build: .
+    ports:
+      - "9292:9292"
+    volumes:
+      # Tenants are published by placing files, so the directory is mounted
+      # rather than baked in: an edit here reaches the next request.
+      # `rake dev:tenant` writes a sample one.
+      - ./app:/app:ro
