@@ -56,7 +56,7 @@ These roles constitute the system. Later layers use these names exclusively.
 | **Host** | The Ruby process running on each Node: accepts HTTP requests, resolves routes, loads tenants, supplies Bindings, and obtains responses | In scope |
 | **Tenant** | One application unit under the shared directory (`/app/<tenant>/`), consisting of a Manifest and mruby source | In scope |
 | **Manifest** | `/app/<tenant>/app.json` — declares the tenant's entrypoint, external domain form, and Bindings | In scope |
-| **Worker** | The entrypoint constant defined by a Tenant's mruby source; accepts one Request and returns a Rack response triplet | In scope |
+| **Worker** | The entrypoint constant defined by a Tenant's mruby source; accepts the request environment and returns a Rack response triplet | In scope |
 | **Binding** | A named Host object supplied into the Sandbox — `Env`, `DB`, `Time`, or `Random` — and tenant code's only path outward | In scope |
 | **Runtime Kit** | mruby helper objects the Host loads into every Sandbox, present regardless of Tenant files | In scope |
 | **Node** | A cluster node running one Host instance; exactly one Node in the cluster is the SQLite Writer | In scope |
@@ -79,7 +79,7 @@ These roles constitute the system. Later layers use these names exclusively.
 - Supply `Env` and each `DB` Binding declared in the Manifest for the duration of one invocation
 - Create a declared Binding's database file when it does not exist, and open it for the invocation
 - Supply the `Time` and `Random` Bindings, which read the Host's clock and entropy
-- Pass a Request as the Worker's only argument and hand the returned triplet to the HTTP layer
+- Compose the request environment from the request and pass it as the Worker's only argument, then hand the returned triplet to the HTTP layer
 - Narrow every Binding's guest-reachable method surface to an explicit allow list
 - Turn a Tenant's execution failure into an HTTP error response for that request
 
@@ -104,6 +104,7 @@ These roles constitute the system. Later layers use these names exclusively.
 - Every request yields exactly one HTTP response; tenant code terminates the Host process under no outcome
 - `Env.node` reflects the Node that actually executed that invocation
 - Tenant code obtains the Host's environment variables, filesystem paths, and network connections under no circumstance
+- Tenant code reads exactly what the Host placed in the request environment, and reaches nothing the Host left out of it
 
 #### Control — what the Host controls / depends on
 
@@ -215,7 +216,7 @@ These roles constitute the system. Later layers use these names exclusively.
 | ID | State + Operation | Result |
 |----|-------------------|--------|
 | B-27 | Every Sandbox | The Runtime Kit loads before the Tenant's `*.rb`, so tenant code may use its constants at the top level |
-| B-28 | Tenant code uses the Runtime Kit | It reads the Request as named fields and builds a Rack response triplet as plain text, as JSON, or with a chosen status code |
+| B-28 | Tenant code uses the Runtime Kit | It reads the request environment through named fields and builds a Rack response triplet as plain text, as JSON, or with a chosen status code |
 | B-29 | Tenant code returns a triplet directly without the Runtime Kit | Equally valid; the Host's handling is unchanged |
 | B-30 | A Tenant's `*.rb` defines a constant that the Runtime Kit or a Binding also defines | The Tenant's definition takes effect, and that Tenant's code no longer reaches what the name held before |
 
@@ -269,6 +270,7 @@ These roles constitute the system. Later layers use these names exclusively.
 | **Tenant** | One application unit under the shared directory, identified by its directory name |
 | **Manifest** | `/app/<tenant>/app.json` |
 | **Worker** | The callable that the entrypoint constant named by the Manifest refers to |
+| **request environment** | The Hash the Host composes from one request and passes as the Worker's only argument. Tenant code names it `env`; `Env`, capitalised, always names the Binding and never this Hash |
 | **Binding** | A named Host object supplied into a Sandbox. `Env` carries node and request information; `DB::*` carries a SQLite database; `Time` carries the Host's clock; `Random` carries the Host's entropy |
 | **Runtime Kit** | The mruby helper objects the Host loads into every Sandbox |
 | **Node** | A cluster node running one Host |
@@ -323,20 +325,35 @@ A Manifest-declared Binding constant lives under `DB::`, so a Manifest declarati
 
 #### Worker entrypoint
 
-The entrypoint constant is a callable accepting one Request and returning a Rack response triplet.
+The entrypoint constant is a callable accepting the request environment and returning a Rack response triplet.
 
 ```ruby
-App = ->(request) {
+App = ->(env) {
   [200, { "content-type" => "text/plain" }, ["hello from #{Env.node}\n"]]
 }
 ```
 
 | Position | Shape |
 |----------|-------|
-| Argument | One Request |
+| Argument | The request environment |
 | Returned `status` | Integer |
 | Returned `headers` | Hash of String keys to String values |
 | Returned `body` | Array of String |
+
+#### Request environment
+
+The Host composes one Hash per invocation and passes it whole. It carries these keys and no others, so a field the Host left out is not reachable by any name tenant code can spell.
+
+| Key | Value |
+|-----|-------|
+| `request_method` | The HTTP method as a String |
+| `script_name` | The path prefix that routed to this Tenant, as a String |
+| `path` | The remainder of the request path, as a String |
+| `query` | A Hash of query parameters |
+| `headers` | A Hash of request headers, each name lowercased and appearing once, carrying the value the HTTP layer resolved for it |
+| `body` | The request body as a String |
+
+The environment is a value the Sandbox holds, not a Binding it dispatches to, so B-16's allow list does not apply to it and no read of it is refused. The request body is part of it and counts against the invocation's memory limit: a body the limit cannot hold ends the request per E-09 whatever the Worker does with it.
 
 #### Guest-reachable method surface
 
@@ -344,12 +361,6 @@ Calls to methods outside these tables are refused per B-16.
 
 | Binding | Method | Returns |
 |---------|--------|---------|
-| Request | `request_method` | The HTTP method as a String |
-| Request | `script_name` | The path prefix that routed to this Tenant, as a String |
-| Request | `path` | The remainder of the request path, as a String |
-| Request | `query` | A Hash of query parameters |
-| Request | `headers` | A Hash of request headers |
-| Request | `body` | The request body as a String |
 | `Env` | `node` | The executing Node's hostname, as a String |
 | `Env` | `writer?` | Whether that Node is the Writer, as true or false |
 | `Env` | `tenant` | The Tenant name, as a String |
@@ -374,20 +385,20 @@ A row's values reach tenant code as Integer, Float, String, or nil.
 
 #### Runtime Kit
 
-The Runtime Kit defines `Req` and `Res`, and nothing else.
+The Runtime Kit defines `Request` and `Response`, and nothing else.
 
 | Constant | Call | Result |
 |----------|------|--------|
-| `Req` | `.new(request)` | Wraps the Request the Worker received; each field is read once and cached inside the Sandbox |
-| `Req` | `#request_method` `#script_name` `#path` `#query` `#headers` `#body` | The same value as the Request field of that name |
-| `Res` | `.text(body, status:, headers:)` | A Rack triplet with `content-type: text/plain; charset=utf-8` |
-| `Res` | `.json(data, status:, headers:)` | A Rack triplet with `content-type: application/json`, its body the JSON form of `data` |
-| `Res` | `.status(code, body)` | A Rack triplet with `content-type: text/plain; charset=utf-8` |
+| `Request` | `.new(env)` | Reads the request environment the Worker received |
+| `Request` | `#request_method` `#script_name` `#path` `#query` `#headers` `#body` | The value the environment carries under the key of that name |
+| `Response` | `.text(body, status:, headers:)` | A Rack triplet with `content-type: text/plain; charset=utf-8` |
+| `Response` | `.json(data, status:, headers:)` | A Rack triplet with `content-type: application/json`, its body the JSON form of `data` |
+| `Response` | `.status(code, body)` | A Rack triplet with `content-type: text/plain; charset=utf-8` |
 
 ```ruby
-App = ->(request) {
-  req = Req.new(request)
-  Res.json({ "node" => Env.node, "path" => req.path })
+App = ->(env) {
+  req = Request.new(env)
+  Response.json({ "node" => Env.node, "path" => req.path })
 }
 ```
 
@@ -409,6 +420,7 @@ A database file is `<tenant>-<database identifier>.db` at the root of the replic
 
 | Situation | Approach |
 |-----------|----------|
+| Any request data tenant code reads | Compose it into a value the Host builds and hands over, rather than a Handle to a Host object; a field the Host left out is unreachable rather than merely refused |
 | Any Host object supplied into a Sandbox | Narrow the methods tenant code may call to an allow list; methods outside it are invisible by default |
 | Any method name on a guest-reachable surface | Keep it clear of Ruby's ambient reflection surface — `method`, `send`, `class` and their kin are refused before any allow list is read |
 | Any Binding that varies per request | Declare it pending when the Sandbox is built and supply it per invocation; an unsupplied call fails rather than falling back to a shared object |
