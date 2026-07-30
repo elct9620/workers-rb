@@ -85,6 +85,7 @@ module Workers
       sandbox.bind("Env")
       sandbox.bind("Time")
       sandbox.bind("Random")
+      sandbox.preload(code: RuntimeKit::SOURCE, name: RuntimeKit::NAME)
       sources.each_with_index do |path, index|
         sandbox.preload(code: read(path), name: snippet_name(path, index))
       end

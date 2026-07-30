@@ -5,8 +5,8 @@ placing files in a shared directory, and the Host serves them from inside
 [kobako](https://github.com/elct9620/kobako)'s WASM/mruby sandbox.
 
 [SPEC.md](SPEC.md) is the target state. What runs today is the single-node
-development environment: path-form routing, per-tenant sandboxes, and the
-`Env`, `Time`, and `Random` Bindings.
+development environment: path-form routing, per-tenant sandboxes, the
+`Env`, `Time`, and `Random` Bindings, and the Runtime Kit.
 
 ## Running it
 
@@ -48,3 +48,15 @@ Nothing but what the Host hands it. The mruby guest has no filesystem,
 network, environment, or process; the request, the node it runs on, the
 clock, and the entropy source arrive as Host objects that answer only the
 methods [SPEC.md](SPEC.md) lists for them.
+
+Every sandbox also carries the Runtime Kit — `Req` to read the request
+without a round-trip per field, and `Res` to shape a Rack triplet as text,
+as JSON, or with a chosen status. It runs inside the guest and grants
+nothing; a Worker that returns a triplet itself needs none of it.
+
+```ruby
+App = ->(request) {
+  req = Req.new(request)
+  Res.json({ "node" => Env.node, "path" => req.path })
+}
+```
