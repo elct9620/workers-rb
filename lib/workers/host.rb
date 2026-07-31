@@ -35,7 +35,7 @@ module Workers
 
     def dispatch
       name, rest = split_path
-      tenant = Tenant.find(settings.app_dir, name, runtime: settings.runtime)
+      tenant = Registry.find(settings.app_dir, name, runtime: settings.runtime)
       halt 404 unless tenant
 
       request.script_name = "/#{name}"

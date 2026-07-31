@@ -149,15 +149,15 @@ class HostTest < TestHelper::Case
   # on its own. The bound is what keeps a long-lived Host from holding every
   # Sandbox it ever built.
   def test_the_host_holds_no_more_sandboxes_than_its_bound_allows
-    cap = Workers::Tenant::CACHED
+    cap = Workers::Registry::CACHED
     runtime = Workers::Runtime.default
 
     serving("eldest") do |root|
-      Workers::Tenant.find(root, "eldest", runtime: runtime)
+      Workers::Registry.find(root, "eldest", runtime: runtime)
 
       cap.times do |n|
         publish(root, "filler#{n}")
-        Workers::Tenant.find(root, "filler#{n}", runtime: runtime)
+        Workers::Registry.find(root, "filler#{n}", runtime: runtime)
       end
 
       assert_operator registry.size, :<=, cap
@@ -167,5 +167,5 @@ class HostTest < TestHelper::Case
 
   private
 
-  def registry = Workers::Tenant.const_get(:REGISTRY, false)
+  def registry = Workers::Registry.const_get(:TENANTS, false)
 end

@@ -10,7 +10,8 @@ README's opening states what runs today.
 |------|---------|
 | `SPEC.md` | Every observable behavior, keyed `F-*` / `B-*` / `E-*`. When intent moves, it moves here first |
 | `lib/workers/host.rb` | How a request finds its Tenant, and which failure becomes which status |
-| `lib/workers/tenant.rb` | When a Sandbox is built, reused, discarded, and evicted |
+| `lib/workers/registry.rb` | What constitutes a Tenant under the shared directory, and how many the Host keeps |
+| `lib/workers/tenant.rb` | When a Sandbox is built, reused, and discarded |
 | `lib/workers/guest.rb` | Every Host object tenant code can reach, and the methods it may call on each |
 | `lib/workers/environment.rb` | Which request fields cross into the guest |
 | `lib/workers/manifest.rb` | What `app.json` may say, and what makes a Tenant unroutable |
