@@ -22,8 +22,15 @@ module Workers
 
     # The domains claimed under one shared directory, and what the directory
     # looked like when they were read.
-    Claims = Struct.new(:stamp, :names)
-    private_constant :Claims
+    Claims = Struct.new(:stamp, :names, :contests) do
+      # The Tenant that declared this domain for itself, if exactly one did.
+      def tenant(domain) = names[domain]
+
+      # The domain this Tenant declared that another Tenant declared too. The
+      # Host has no way to pick between them, and picking wrong would hand one
+      # Tenant's traffic to another Tenant's code.
+      def contested(name) = contests[name]
+    end
 
     TENANTS = {}
     # Keyed by shared directory, of which a Host has one for its life, so this
@@ -46,13 +53,21 @@ module Workers
       raise InvalidManifest, "tenant #{name.inspect} is not routable: #{e.message}"
     end
 
-    # The Tenant that declared this domain for itself. No single Tenant could
-    # be asked whether it claimed a domain, so answering means reading every
-    # Manifest under the directory — which is what a domain costs over a name.
-    def self.claiming(root, domain, runtime:)
-      name = claims(root)[domain]
+    # What every Tenant under the directory declared for itself. No single
+    # Tenant could be asked whether it claimed a domain, so answering means
+    # reading all of them — which is what a domain costs over a name.
+    #
+    # Reread whenever any Manifest is added, rewritten, or removed, so the
+    # shared directory governs what a domain reaches.
+    def self.claims(root)
+      stamp = manifests(root)
+      cached = LOCK.synchronize { CLAIMS[root] }
+      return cached if cached&.stamp == stamp
 
-      find(root, name, runtime: runtime) if name
+      # Read outside the lock: every request pays the walk, and one Host has
+      # one shared directory to disagree about.
+      names, contests = scan(root)
+      LOCK.synchronize { CLAIMS[root] = Claims.new(stamp, names, contests) }
     end
 
     # Reached only when no Manifest answers, so the two questions the Host
@@ -98,35 +113,38 @@ module Workers
     end
     private_class_method :remember
 
-    # Reread whenever any Manifest under the directory is added, rewritten, or
-    # removed, so the shared directory governs what a domain reaches.
-    def self.claims(root)
-      stamp = manifests(root)
-      cached = LOCK.synchronize { CLAIMS[root] }
-      return cached.names if cached&.stamp == stamp
-
-      # Read outside the lock: every request pays the walk, and one Host has
-      # one shared directory to disagree about.
-      names = scan(root)
-      LOCK.synchronize { CLAIMS[root] = Claims.new(stamp, names) }
-      names
-    end
-    private_class_method :claims
-
-    # A Manifest the Host cannot act on claims no domain rather than stopping
-    # the read: one Tenant's mistake is not the other Tenants' to pay for.
+    # The domains one Tenant declared alone, and the Tenants left contesting
+    # one another for the rest.
     def self.scan(root)
-      manifest_paths(root).each_with_object({}) do |path, names|
+      names = {}
+      contests = {}
+
+      declared(root).each do |domain, claimants|
+        if claimants.one?
+          names[domain] = claimants.first
+        else
+          claimants.each { |name| contests[name] = domain }
+        end
+      end
+
+      [ names, contests ]
+    end
+    private_class_method :scan
+
+    # A Manifest the Host cannot act on declares nothing rather than stopping
+    # the read: one Tenant's mistake is not the other Tenants' to pay for.
+    def self.declared(root)
+      manifest_paths(root).each_with_object({}) do |path, claimants|
         name = File.basename(File.dirname(path))
         next unless name.match?(NAME)
 
         domain = parse(path).domain
-        names[domain] = name if domain
+        (claimants[domain] ||= []) << name if domain
       rescue InvalidManifest, SourceUnreadable
         next
       end
     end
-    private_class_method :scan
+    private_class_method :declared
 
     # A Manifest that vanishes between the walk and the stat simply drops out,
     # which reads as a change.

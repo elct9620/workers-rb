@@ -120,7 +120,67 @@ class RoutingTest < TestHelper::Case
     end
   end
 
+  def test_a_domain_two_tenants_declared_reaches_neither
+    contesting do
+      get "http://contested.test/items"
+
+      assert_equal 404, last_response.status
+    end
+  end
+
+  # Picking one of them would hand a Tenant's traffic to another Tenant's
+  # code, so a Tenant that cannot be told apart from another is not routable
+  # at all — including under the path form, where nothing is ambiguous.
+  def test_a_contested_domain_costs_both_tenants_every_other_form_too
+    Workers::Host.set :base_domain, "workers.test"
+
+    contesting do
+      assert_equal 404, get("/first").status
+      assert_equal 404, get("/second").status
+      assert_equal 404, get("http://first.workers.test/").status
+    end
+  end
+
+  def test_a_contested_domain_is_recorded_for_the_operator
+    contesting do
+      get "/first"
+
+      assert_includes last_request.env["rack.errors"].string, "contested.test"
+    end
+  end
+
+  def test_a_tenant_claiming_nothing_keeps_its_route_beside_a_contested_domain
+    contesting do |root|
+      publish(root, "bystander", source: LANDING)
+      get "/bystander"
+
+      assert_equal "bystander", landing["tenant"]
+    end
+  end
+
+  def test_a_domain_left_to_one_tenant_again_routes_to_it
+    contesting do |root|
+      assert_equal 404, get("http://contested.test/").status
+
+      publish(root, "second", manifest: "{}", source: LANDING)
+      get "http://contested.test/"
+
+      assert_equal "first", landing["tenant"]
+    end
+  end
+
   private
 
   def landing = JSON.parse(last_response.body)
+
+  # Two Tenants declaring one domain, with the shared directory they sit in
+  # left open for a test to publish more into.
+  def contesting(&)
+    manifest = '{ "domain": "contested.test" }'
+
+    serving("first", manifest: manifest, source: LANDING) do |root|
+      publish(root, "second", manifest: manifest, source: LANDING)
+      yield root
+    end
+  end
 end

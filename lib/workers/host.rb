@@ -66,18 +66,26 @@ module Workers
     # answering to more than one reaches the Tenant that claimed the most
     # specific name for itself rather than whichever was looked up first.
     def route
-      claimed = Registry.claiming(settings.app_dir, request.host, runtime: settings.runtime)
+      @claims = Registry.claims(settings.app_dir)
+
+      claimed = lookup(@claims.tenant(request.host))
       return [ claimed, "", request.path_info ] if claimed
 
-      label = subdomain
-      under_base = label && lookup(label)
+      under_base = lookup(subdomain)
       return [ under_base, "", request.path_info ] if under_base
 
       name, rest = split_path
       [ lookup(name), "/#{name}", rest ]
     end
 
-    def lookup(name) = Registry.find(settings.app_dir, name, runtime: settings.runtime)
+    def lookup(name)
+      return unless name
+
+      domain = @claims.contested(name)
+      raise InvalidManifest, "tenant #{name.inspect} is not routable: another Tenant declares #{domain.inspect}" if domain
+
+      Registry.find(settings.app_dir, name, runtime: settings.runtime)
+    end
 
     # The label the Host's own base domain leaves in front of it. A hostname
     # that is not under that domain leaves nothing, and neither does a Host
