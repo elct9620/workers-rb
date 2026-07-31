@@ -7,8 +7,7 @@ require "test_helper"
 class FailureTest < TestHelper::Case
   # Small enough that exhausting them is quick; the Host applies one set to
   # every Tenant either way.
-  TIGHT = Workers::Runtime.default(guest_binary: Workers.default_guest_binary)
-                          .with(timeout: 0.5, memory_limit: 1024 * 1024)
+  TIGHT = Workers::Runtime.default.with(timeout: 0.5, memory_limit: 1024 * 1024)
 
   def test_a_manifest_that_is_not_json_leaves_the_tenant_unroutable
     get "/badjson"

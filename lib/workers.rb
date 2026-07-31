@@ -5,7 +5,9 @@ require "kobako"
 module Workers
   # Tenant code depends on JSON and ASCII Regexp, which the guest binary
   # bundled in the gem does not carry. `rake wasm:fetch` places the variant
-  # that does alongside the gem it was built with.
+  # that does alongside the gem it was built with, and the path follows that
+  # version rather than a setting: the sandbox is the binary, so a Host
+  # pointed at another build is a Host whose isolation nobody pinned.
   def self.default_guest_binary
     File.expand_path("../vendor/kobako+full-#{Kobako::VERSION}.wasm", __dir__)
   end

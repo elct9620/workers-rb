@@ -12,9 +12,7 @@ module Workers
     set :base_domain, ENV.fetch("WORKERS_BASE_DOMAIN", nil)
     set :node, Node.current
     set :databases, Databases.current
-    set :runtime, Runtime.default(
-      guest_binary: ENV.fetch("WORKERS_GUEST_BINARY", Workers.default_guest_binary)
-    )
+    set :runtime, Runtime.default
 
     # A Tenant reaches the cluster under a domain it declares for itself, so
     # the set of hostnames the Host answers to is not knowable in advance and
