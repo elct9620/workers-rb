@@ -58,9 +58,25 @@ namespace :dev do
   end
 end
 
+namespace :e2e do
+  desc "Publish the tenants the cluster suite drives"
+  task :publish do
+    dest = ENV.fetch("WORKERS_APP_DIR", "app")
+    mkdir_p dest
+    cp_r FileList["e2e/app/*"], dest
+  end
+end
+
 Rake::TestTask.new do |task|
   task.libs << "lib" << "test"
   task.test_files = FileList["test/**/*_test.rb"]
+end
+
+# Drives a cluster that is already running, so it stays out of the default
+# task: `rake` needs Ruby and the guest binary, this needs Docker.
+Rake::TestTask.new(e2e: "e2e:publish") do |task|
+  task.description = "Drive the running cluster through its external address"
+  task.test_files = FileList["e2e/*_test.rb"]
 end
 
 task test: "wasm:fetch"

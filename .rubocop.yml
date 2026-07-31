@@ -8,6 +8,7 @@ AllCops:
   Exclude:
     - vendor/**/*
     - app/**/*
+    - e2e/app/**/*
     - test/fixtures/app/**/*
 
 # Omakase settles formatting only. Lint is what catches a mistake rather than

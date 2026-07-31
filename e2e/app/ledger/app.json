@@ -1,0 +1,1 @@
+{ "bindings": { "db": { "DB::Main": "entries" } } }

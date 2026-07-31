@@ -23,7 +23,9 @@ services:
   proxy:
     image: caddy:2-alpine
     ports:
-      - "9292:80"
+      # The cluster's one external address. `WORKERS_PORT` moves it, for a
+      # machine already running something of its own on 9292.
+      - "${WORKERS_PORT:-9292}:80"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
     depends_on:

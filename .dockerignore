@@ -1,6 +1,7 @@
 .git
 .gitignore
 app
+e2e
 test
 tmp
 vendor
