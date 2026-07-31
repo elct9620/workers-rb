@@ -76,6 +76,20 @@ class RoutingTest < TestHelper::Case
     end
   end
 
+  # The base domain is a suffix Tenants sit under, not a name any of them
+  # holds, and one label is all it leaves in front of itself.
+  def test_only_a_single_label_under_the_base_domain_names_a_tenant
+    Workers::Host.set :base_domain, "workers.test"
+
+    serving("plain", source: LANDING) do
+      [ "workers.test", "notworkers.test", "deep.plain.workers.test" ].each do |host|
+        get "http://#{host}/plain/items"
+
+        assert_equal "/plain", landing["script_name"], host
+      end
+    end
+  end
+
   # The Host answers under whatever hostname reaches it, so a Host header that
   # names no Tenant is no reason to stop looking.
   def test_a_host_header_naming_no_tenant_leaves_the_path_form

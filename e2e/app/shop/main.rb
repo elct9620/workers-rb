@@ -1,4 +1,6 @@
-# Says which Node answered and where that Node decided the Worker was mounted.
+# The same Worker as `where`, published under a domain its Manifest declares
+# rather than under the cluster's own — so what the two answers differ in is
+# the routing form, and nothing else.
 App = ->(env) {
   req = Request.new(env)
 
