@@ -1,0 +1,15 @@
+# The tunnel's stand-in for the local cluster: one address in front of every
+# Node, matching SPEC.md B-39.
+#
+# A Tenant reaches the cluster under a domain it declares for itself, so the
+# set of hostnames is not knowable here. The proxy answers to all of them and
+# leaves choosing the Tenant to the Host, which is the only side that knows
+# what was published.
+:80 {
+	reverse_proxy node-a:9292 node-b:9292 node-c:9292 {
+		# Consecutive requests land on different Nodes, which is what makes
+		# `Env.node` worth reading at all. Caddy's default is random, which
+		# rotates too but not predictably enough to demonstrate.
+		lb_policy round_robin
+	}
+}
