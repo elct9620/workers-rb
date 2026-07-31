@@ -4,11 +4,13 @@ A self-hostable, multi-tenant edge function platform: tenants publish Ruby by
 placing files in a shared directory, and the Host serves them from inside
 [kobako](https://github.com/elct9620/kobako)'s WASM/mruby sandbox.
 
-[SPEC.md](SPEC.md) is the target state. What runs today is the single-node
-development environment: all three routing forms, per-tenant sandboxes, the
-Runtime Kit, and the `Env`, `DB`, `Time`, and `Random` Bindings. A write
-reaches the local database file whatever `WORKERS_WRITER` says, because
-routing a replica's writes to the Writer arrives with the cluster.
+[SPEC.md](SPEC.md) is the target state. What runs today is a three-node local
+cluster: all three routing forms, per-tenant sandboxes, the Runtime Kit, and
+the `Env`, `DB`, `Time`, and `Random` Bindings. The nodes share one database
+mount rather than replicating between them, so a write from any node is there
+for the next request immediately and reaches the local file whatever
+`WORKERS_WRITER` says — replication with a lag of its own, and routing a
+replica's writes to the Writer, arrive when the databases move to libSQL.
 
 ## Running it
 
@@ -16,13 +18,17 @@ routing a replica's writes to the Writer arrives with the cluster.
 bundle install
 bundle exec rake dev:tenant     # writes a sample tenant into app/
 docker compose up -d --wait
-curl localhost:9292/hello
+curl localhost:9292/hello       # WORKERS_PORT moves this off 9292
 ```
 
+Three Hosts sit behind one address, taking requests in turn, so consecutive
+calls report a different `Env.node` and only one of them answers `Env.writer?`
+with true.
+
 Tenant code lives in `app/<tenant>/` — an `app.json` Manifest and one or more
-`*.rb` files, loaded in filename order. The directory is mounted into the
-container, so adding or editing a tenant reaches the next request without a
-restart.
+`*.rb` files, loaded in filename order. The directory is mounted into every
+node, so adding or editing a tenant reaches the next request without a restart
+and without visiting each one.
 
 A tenant answers at `/<tenant>`, at `<tenant>.<base>` once `WORKERS_BASE_DOMAIN`
 names the base, and at whatever `domain` its Manifest declares. The domain forms
@@ -58,12 +64,24 @@ no Tenant can name another's. `WORKERS_DB_DIR` points the Host at that mount;
 bundle exec rake
 ```
 
-The suite fetches the guest binary it needs. Running the Host outside a
-container works the same way:
+The suite fetches the guest binary it needs and drives the real Host in
+process. Running one outside a container works the same way:
 
 ```sh
 bundle exec puma
 ```
+
+What one process cannot show — that every node serves the same tenants, that
+one of them is the Writer, that one address reaches them all — is checked
+against the running cluster instead:
+
+```sh
+docker compose up -d --wait
+bundle exec rake e2e
+```
+
+It publishes the tenants under `e2e/app/` into the shared directory and then
+speaks only HTTP, naming no node.
 
 ## What tenant code can reach
 
