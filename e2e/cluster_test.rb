@@ -51,15 +51,6 @@ class ClusterTest < Minitest::Test
     assert_equal [ "where" ], answers.map { |body| body.fetch("tenant") }.uniq
   end
 
-  # The Writer is designated by configuration, so it does not move with node
-  # state and no second Node takes the title while the first is up.
-  def test_exactly_one_node_answers_as_the_writer
-    writers = Array.new(ROUNDS) { get("/where") }
-                   .to_h { |body| [ body.fetch("node"), body.fetch("writer") ] }
-
-    assert_equal 1, writers.count { |_node, writer| writer }, writers.inspect
-  end
-
   def test_the_path_form_spends_a_segment_naming_the_tenant
     body = get("/where/items")
 
@@ -87,9 +78,9 @@ class ClusterTest < Minitest::Test
   # follows lands on another, and what the caller counts is one ledger.
   def test_a_write_from_any_node_is_there_for_a_read_from_the_next
     before = get("/ledger").fetch("entries")
-    writers = Array.new(ROUNDS) { post("/ledger").fetch("node") }
+    nodes = Array.new(ROUNDS) { post("/ledger").fetch("node") }
 
-    assert_equal NODES, writers.uniq.size
+    assert_equal NODES, nodes.uniq.size
     assert_equal before + ROUNDS, get("/ledger").fetch("entries")
   end
 

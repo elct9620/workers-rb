@@ -37,7 +37,6 @@ SAMPLE_TENANT = <<~'RUBY'
     Response.json({
       "tenant" => Env.tenant,
       "node" => Env.node,
-      "writer" => Env.writer?,
       "path" => req.path,
       "visits" => DB::Main.query("select count(*) as n from visits")[0]["n"]
     })

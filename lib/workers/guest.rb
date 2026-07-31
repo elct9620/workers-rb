@@ -38,7 +38,7 @@ module Workers
     class Env
       include AllowList
 
-      reachable :node, :writer?, :tenant, :request_id
+      reachable :node, :tenant, :request_id
 
       attr_reader :tenant, :request_id
 
@@ -49,7 +49,6 @@ module Workers
       end
 
       def node = @node.name
-      def writer? = @node.writer?
     end
 
     # One SQLite database a Tenant declared, reachable under the constant the

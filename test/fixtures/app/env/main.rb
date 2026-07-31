@@ -1,7 +1,6 @@
 App = ->(env) {
   body = JSON.generate(
     "node" => Env.node,
-    "writer" => Env.writer?,
     "tenant" => Env.tenant,
     "request_id" => Env.request_id,
     # Asked twice within one invocation; the identity is the invocation's, not
