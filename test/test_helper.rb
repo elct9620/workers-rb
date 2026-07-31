@@ -19,6 +19,7 @@ module TestHelper
 
     def setup
       Workers::Host.set :app_dir, FIXTURE_APP_DIR
+      Workers::Host.set :base_domain, nil
       Workers::Host.set :node, Workers::Node.current
       Workers::Host.set :databases, Workers::Databases.current
       Workers::Host.set :runtime, Workers::Runtime.default

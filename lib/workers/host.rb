@@ -7,6 +7,9 @@ module Workers
   # Tenant and hands back what that Tenant's Worker returned, unchanged.
   class Host < Sinatra::Base
     set :app_dir, ENV.fetch("WORKERS_APP_DIR", "app")
+    # Left unset, `<tenant>.<base>` reaches nothing: a Host that has not been
+    # told which suffix is its own cannot read a label as a Tenant name.
+    set :base_domain, ENV.fetch("WORKERS_BASE_DOMAIN", nil)
     set :node, Node.current
     set :databases, Databases.current
     set :runtime, Runtime.default(
@@ -34,18 +37,17 @@ module Workers
     private
 
     def dispatch
-      name, rest = split_path
-      tenant = Registry.find(settings.app_dir, name, runtime: settings.runtime)
+      tenant, script_name, path = route
       halt 404 unless tenant
 
-      request.script_name = "/#{name}"
-      request.path_info = rest
+      request.script_name = script_name
+      request.path_info = path
       tenant.call(request, node: settings.node, databases: settings.databases)
     rescue InvalidManifest => e
       # A Manifest the Host cannot act on is not a Tenant, so its endpoints
       # answer as though nothing were published there. The operator is the
       # only one who can fix it, so the reason goes to them and not outward.
-      env["rack.errors"].puts("tenant #{name.inspect} is not routable: #{e.message}")
+      env["rack.errors"].puts(e.message)
       halt 404
     rescue SourceUnreadable => e
       # The Tenant published nothing wrong; this Host cannot reach what it
@@ -57,6 +59,34 @@ module Workers
       raise unless failure
 
       failure.to_response
+    end
+
+    # The Tenant this request belongs to, and the path split that goes with the
+    # form that found it. The forms are tried in one order, so a request
+    # answering to more than one reaches the Tenant that claimed the most
+    # specific name for itself rather than whichever was looked up first.
+    def route
+      claimed = Registry.claiming(settings.app_dir, request.host, runtime: settings.runtime)
+      return [ claimed, "", request.path_info ] if claimed
+
+      label = subdomain
+      under_base = label && lookup(label)
+      return [ under_base, "", request.path_info ] if under_base
+
+      name, rest = split_path
+      [ lookup(name), "/#{name}", rest ]
+    end
+
+    def lookup(name) = Registry.find(settings.app_dir, name, runtime: settings.runtime)
+
+    # The label the Host's own base domain leaves in front of it. A hostname
+    # that is not under that domain leaves nothing, and neither does a Host
+    # with no base domain configured.
+    def subdomain
+      return unless settings.base_domain
+
+      suffix = ".#{settings.base_domain}"
+      request.host.delete_suffix(suffix) if request.host.end_with?(suffix)
     end
 
     # Rack's SCRIPT_NAME / PATH_INFO convention: the segment that routed here

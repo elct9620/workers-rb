@@ -5,7 +5,7 @@ placing files in a shared directory, and the Host serves them from inside
 [kobako](https://github.com/elct9620/kobako)'s WASM/mruby sandbox.
 
 [SPEC.md](SPEC.md) is the target state. What runs today is the single-node
-development environment: path-form routing, per-tenant sandboxes, the
+development environment: all three routing forms, per-tenant sandboxes, the
 Runtime Kit, and the `Env`, `DB`, `Time`, and `Random` Bindings. A write
 reaches the local database file whatever `WORKERS_WRITER` says, because
 routing a replica's writes to the Writer arrives with the cluster.
@@ -23,6 +23,11 @@ Tenant code lives in `app/<tenant>/` — an `app.json` Manifest and one or more
 `*.rb` files, loaded in filename order. The directory is mounted into the
 container, so adding or editing a tenant reaches the next request without a
 restart.
+
+A tenant answers at `/<tenant>`, at `<tenant>.<base>` once `WORKERS_BASE_DOMAIN`
+names the base, and at whatever `domain` its Manifest declares. The domain forms
+leave the whole path to the Worker; only the path form spends a segment naming
+the tenant.
 
 ```ruby
 # app/hello/main.rb

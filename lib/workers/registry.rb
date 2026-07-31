@@ -20,9 +20,17 @@ module Workers
     Published = Struct.new(:stamp, :tenant)
     private_constant :Published
 
+    # The domains claimed under one shared directory, and what the directory
+    # looked like when they were read.
+    Claims = Struct.new(:stamp, :names)
+    private_constant :Claims
+
     TENANTS = {}
+    # Keyed by shared directory, of which a Host has one for its life, so this
+    # holds a single entry however long it runs.
+    CLAIMS = {}
     LOCK = Mutex.new
-    private_constant :TENANTS, :LOCK
+    private_constant :TENANTS, :CLAIMS, :LOCK
 
     def self.find(root, name, runtime:)
       return unless name.match?(NAME)
@@ -32,6 +40,19 @@ module Workers
       return absent(root, dir) unless File.file?(manifest)
 
       LOCK.synchronize { published(dir, manifest, runtime) }
+    rescue InvalidManifest => e
+      # Only the Registry knows which Tenant the Manifest belonged to, and the
+      # operator reading the record is the one who has to find the file.
+      raise InvalidManifest, "tenant #{name.inspect} is not routable: #{e.message}"
+    end
+
+    # The Tenant that declared this domain for itself. No single Tenant could
+    # be asked whether it claimed a domain, so answering means reading every
+    # Manifest under the directory — which is what a domain costs over a name.
+    def self.claiming(root, domain, runtime:)
+      name = claims(root)[domain]
+
+      find(root, name, runtime: runtime) if name
     end
 
     # Reached only when no Manifest answers, so the two questions the Host
@@ -40,11 +61,14 @@ module Workers
     # published, and a Sandbox cached from when it could be read must not
     # stand in for one.
     def self.absent(root, dir)
-      raise SourceUnreadable, root unless File.readable?(root) && File.executable?(root)
+      raise SourceUnreadable, root unless readable?(root)
 
       forget(dir)
     end
     private_class_method :absent
+
+    def self.readable?(root) = File.readable?(root) && File.executable?(root)
+    private_class_method :readable?
 
     def self.forget(dir)
       LOCK.synchronize { TENANTS.delete_if { |(cached, _), _| cached == dir } }
@@ -73,6 +97,59 @@ module Workers
       entry.tenant
     end
     private_class_method :remember
+
+    # Reread whenever any Manifest under the directory is added, rewritten, or
+    # removed, so the shared directory governs what a domain reaches.
+    def self.claims(root)
+      stamp = manifests(root)
+      cached = LOCK.synchronize { CLAIMS[root] }
+      return cached.names if cached&.stamp == stamp
+
+      # Read outside the lock: every request pays the walk, and one Host has
+      # one shared directory to disagree about.
+      names = scan(root)
+      LOCK.synchronize { CLAIMS[root] = Claims.new(stamp, names) }
+      names
+    end
+    private_class_method :claims
+
+    # A Manifest the Host cannot act on claims no domain rather than stopping
+    # the read: one Tenant's mistake is not the other Tenants' to pay for.
+    def self.scan(root)
+      manifest_paths(root).each_with_object({}) do |path, names|
+        name = File.basename(File.dirname(path))
+        next unless name.match?(NAME)
+
+        domain = parse(path).domain
+        names[domain] = name if domain
+      rescue InvalidManifest, SourceUnreadable
+        next
+      end
+    end
+    private_class_method :scan
+
+    # A Manifest that vanishes between the walk and the stat simply drops out,
+    # which reads as a change.
+    def self.manifests(root)
+      manifest_paths(root).filter_map do |path|
+        [ path, *stamp(path) ]
+      rescue SourceUnreadable
+        nil
+      end
+    end
+    private_class_method :manifests
+
+    # An unreadable shared directory yields nothing rather than raising here —
+    # telling that apart from a directory holding no Tenants is `absent`'s to
+    # do, once a request has named the Tenant it expected to find. Asked before
+    # the walk rather than discovered during it, so an outage the operator
+    # already hears about once does not also warn on every entry.
+    def self.manifest_paths(root)
+      return [] unless readable?(root)
+
+      Dir.glob(File.join(root, "*", MANIFEST)).sort
+    end
+    private_class_method :manifest_paths
 
     def self.stamp(path)
       stat = File.stat(path)
