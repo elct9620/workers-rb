@@ -93,7 +93,7 @@ class DatabaseTest < TestHelper::Case
     end
   end
 
-  # Each invocation holds its own connection to the one file, so a writer that
+  # Each invocation holds its own connection to the one file, so a write that
   # meets another's lock waits for it rather than answering a failure.
   def test_concurrent_invocations_writing_one_database_all_complete
     storing do

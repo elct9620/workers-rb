@@ -83,7 +83,7 @@ module Workers
       private
 
       # Concurrent invocations of one Tenant each hold their own connection to
-      # the same file, so a writer meeting another's lock waits rather than
+      # the same file, so a write meeting another's lock waits rather than
       # failing. The wait outlasts no request: the invocation's own wall clock
       # is what ends it.
       BUSY_TIMEOUT = 5_000
