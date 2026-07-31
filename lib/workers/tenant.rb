@@ -4,14 +4,10 @@ module Workers
   # One application unit under the shared directory — a Manifest plus mruby
   # source — and the Sandbox they are loaded into.
   class Tenant
-    MANIFEST = "app.json"
-
-    Loaded = Struct.new(:sandbox, :entrypoint, :databases)
-    private_constant :Loaded
-
-    def initialize(dir, runtime:)
+    def initialize(dir, manifest, runtime:)
       @dir = dir
       @name = File.basename(dir)
+      @manifest = manifest
       @runtime = runtime
       @lock = Mutex.new
     end
@@ -20,13 +16,13 @@ module Workers
     # Sandbox is built, so nothing this request touched survives into the next
     # one.
     def call(rack_request, node:, databases:)
-      loaded = current
+      sandbox = current
       errors = rack_request.env["rack.errors"]
-      supplied = loaded.databases.to_h { |constant, identifier|
+      supplied = @manifest.databases.to_h { |constant, identifier|
         [ constant, databases.for(@name, identifier, errors: errors) ]
       }
 
-      triplet = loaded.sandbox.run(loaded.entrypoint, Environment.for(rack_request)) do |context|
+      triplet = sandbox.run(@manifest.entrypoint.to_sym, Environment.for(rack_request)) do |context|
         context.bind("Env", Guest::Env.new(node: node, tenant: @name))
         context.bind("Time", Guest::Clock.new)
         context.bind("Random", Guest::Entropy.new)
@@ -46,22 +42,21 @@ module Workers
     def current
       @lock.synchronize do
         stamp = fingerprint
-        @loaded = nil unless @stamp == stamp
+        @sandbox = nil unless @stamp == stamp
         @stamp = stamp
-        @loaded ||= build
+        @sandbox ||= build
       end
     end
 
     # A trap leaves the Sandbox unusable, so the next request builds a new one
     # rather than dispatching into it.
     def discard
-      @lock.synchronize { @loaded = @stamp = nil }
+      @lock.synchronize { @sandbox = @stamp = nil }
     end
 
     # kobako seals the Service registry and snippet table at the first
-    # dispatch, so a changed Tenant is rebuilt rather than amended.
+    # dispatch, so changed source is rebuilt rather than amended.
     def build
-      manifest = Manifest.parse(read(File.join(@dir, MANIFEST)))
       sandbox = @runtime.sandbox
       sandbox.bind("Env")
       sandbox.bind("Time")
@@ -69,13 +64,13 @@ module Workers
       # Declared here and supplied per invocation, so a constant the Manifest
       # left out is a `NameError` in the guest rather than a Binding that
       # happens to be empty.
-      manifest.databases.each_key { |constant| sandbox.bind(constant) }
+      @manifest.databases.each_key { |constant| sandbox.bind(constant) }
       sandbox.preload(code: RuntimeKit::SOURCE, name: RuntimeKit::NAME)
       sources.each_with_index do |path, index|
         sandbox.preload(code: read(path), name: snippet_name(path, index))
       end
 
-      Loaded.new(sandbox, manifest.entrypoint.to_sym, manifest.databases)
+      sandbox
     end
 
     def read(path)
@@ -109,7 +104,7 @@ module Workers
     # A file that vanishes between the glob and the stat simply drops out,
     # which reads as a change and rebuilds.
     def fingerprint
-      [ File.join(@dir, MANIFEST), *sources ].filter_map do |path|
+      sources.filter_map do |path|
         stat = File.stat(path)
         [ path, stat.mtime.to_r, stat.size ]
       rescue Errno::ENOENT

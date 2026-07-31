@@ -11,8 +11,14 @@ module Workers
   # otherwise accumulate every Sandbox it ever built.
   class Registry
     NAME = /\A[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\z/
+    MANIFEST = "app.json"
 
     CACHED = 64
+
+    # What the Manifest was when this Tenant was made, so a rewritten one is
+    # recognised as a different Tenant rather than the same one amended.
+    Published = Struct.new(:stamp, :tenant)
+    private_constant :Published
 
     TENANTS = {}
     LOCK = Mutex.new
@@ -22,9 +28,10 @@ module Workers
       return unless name.match?(NAME)
 
       dir = File.join(root, name)
-      return absent(root, dir) unless File.file?(File.join(dir, Tenant::MANIFEST))
+      manifest = File.join(dir, MANIFEST)
+      return absent(root, dir) unless File.file?(manifest)
 
-      LOCK.synchronize { remember([ dir, runtime ]) { Tenant.new(dir, runtime: runtime) } }
+      LOCK.synchronize { published(dir, manifest, runtime) }
     end
 
     # Reached only when no Manifest answers, so the two questions the Host
@@ -45,14 +52,41 @@ module Workers
     end
     private_class_method :forget
 
+    # The Tenant this Manifest published. A Manifest decides what its Sandbox
+    # is built with, so a rewritten one makes a new Tenant rather than amending
+    # the one already cached.
+    def self.published(dir, manifest, runtime)
+      key = [ dir, runtime ]
+      stamp = stamp(manifest)
+      entry = TENANTS.delete(key)
+      entry = Published.new(stamp, Tenant.new(dir, parse(manifest), runtime: runtime)) unless entry&.stamp == stamp
+
+      remember(key, entry)
+    end
+    private_class_method :published
+
     # Ruby's Hash keeps insertion order, so re-inserting on every reach leaves
     # the oldest entry the least recently reached one.
-    def self.remember(key)
-      tenant = TENANTS.delete(key) || yield
-      TENANTS[key] = tenant
+    def self.remember(key, entry)
+      TENANTS[key] = entry
       TENANTS.shift while TENANTS.size > CACHED
-      tenant
+      entry.tenant
     end
     private_class_method :remember
+
+    def self.stamp(path)
+      stat = File.stat(path)
+      [ stat.mtime.to_r, stat.size ]
+    rescue SystemCallError
+      raise SourceUnreadable, path
+    end
+    private_class_method :stamp
+
+    def self.parse(path)
+      Manifest.parse(File.read(path))
+    rescue SystemCallError
+      raise SourceUnreadable, path
+    end
+    private_class_method :parse
   end
 end

@@ -122,6 +122,25 @@ class HostTest < TestHelper::Case
     end
   end
 
+  # The Manifest decides what the Sandbox is built with, so rewriting it alone
+  # has to reach the next request as surely as rewriting the source does.
+  def test_editing_only_the_manifest_serves_the_change_on_the_next_request
+    source = <<~RUBY
+      App = ->(env) { [200, { "content-type" => "text/plain" }, ["first"]] }
+      Other = ->(env) { [200, { "content-type" => "text/plain" }, ["second"]] }
+    RUBY
+
+    serving("switched", source: source) do |root|
+      get "/switched"
+      assert_equal "first", last_response.body
+
+      File.write(File.join(root, "switched", "app.json"), '{ "entrypoint": "Other" }')
+      get "/switched"
+
+      assert_equal "second", last_response.body
+    end
+  end
+
   def test_concurrent_requests_to_one_tenant_each_carry_their_own_bindings
     paths = 8.times.map { |n|
       Thread.new { Rack::MockRequest.new(Workers::Host).get("/surface/req#{n}") }
