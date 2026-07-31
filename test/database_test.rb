@@ -38,12 +38,12 @@ class DatabaseTest < TestHelper::Case
     end
   end
 
-  def test_a_database_file_takes_its_name_from_the_tenant_and_the_identifier
-    mounting do |mount|
+  def test_a_database_takes_its_name_from_the_tenant_and_the_identifier
+    storing do |root|
       serving("keeper", manifest: MAIN, source: probing('DB::Main.execute("create table t (n integer)")')) do
         get "/keeper"
 
-        assert_equal [ "keeper-main.db" ], Dir.children(mount)
+        assert_equal [ "keeper-main.db" ], Dir.children(root)
       end
     end
   end
@@ -55,7 +55,7 @@ class DatabaseTest < TestHelper::Case
   end
 
   def test_a_tenant_reaches_no_database_another_tenant_declared
-    mounting do
+    storing do
       serving("owner", manifest: MAIN, source: probing(<<~RUBY)) do |root|
         DB::Main.execute("create table if not exists secrets (word text)")
         DB::Main.execute("insert into secrets values ('open sesame')")
@@ -96,7 +96,7 @@ class DatabaseTest < TestHelper::Case
   # Each invocation holds its own connection to the one file, so a writer that
   # meets another's lock waits for it rather than answering a failure.
   def test_concurrent_invocations_writing_one_database_all_complete
-    mounting do
+    storing do
       serving("busy", manifest: MAIN, source: probing(<<~RUBY)) do
         DB::Main.execute("create table if not exists hits (n integer)")
         DB::Main.execute("insert into hits values (1)")
@@ -114,8 +114,8 @@ class DatabaseTest < TestHelper::Case
     end
   end
 
-  def test_a_mount_the_host_cannot_open_is_a_binding_failure
-    Workers::Host.set :databases, Workers::Databases.new(root: "/no/such/mount")
+  def test_a_database_the_host_cannot_open_is_a_binding_failure
+    Workers::Host.set :databases, Workers::Databases.new(root: "/no/such/place")
 
     serving("stranded", manifest: MAIN, source: <<~RUBY) do
       App = ->(env) { DB::Main.query("select 1") }
@@ -129,16 +129,16 @@ class DatabaseTest < TestHelper::Case
 
   # Reaching the database at all is the Host's side of the contract. The
   # caller learns nothing it could act on, so the operator has to.
-  def test_a_mount_the_host_cannot_open_is_recorded_for_the_operator
-    Workers::Host.set :databases, Workers::Databases.new(root: "/no/such/mount")
+  def test_a_database_the_host_cannot_open_is_recorded_for_the_operator
+    Workers::Host.set :databases, Workers::Databases.new(root: "/no/such/place")
 
     serving("stranded", manifest: MAIN, source: <<~RUBY) do
       App = ->(env) { DB::Main.query("select 1") }
     RUBY
       get "/stranded"
 
-      assert_includes recorded, "/no/such/mount/stranded-main.db"
-      refute_includes last_response.body, "/no/such/mount"
+      assert_includes recorded, "/no/such/place/stranded-main.db"
+      refute_includes last_response.body, "/no/such/place"
     end
   end
 
@@ -173,7 +173,7 @@ class DatabaseTest < TestHelper::Case
   end
 
   def answering(statements, manifest: MAIN)
-    mounting do
+    storing do
       serving("subject", manifest: manifest, source: probing(statements)) do
         yield
       end

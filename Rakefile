@@ -51,8 +51,8 @@ namespace :dev do
     File.write(File.join(dir, "app.json"), SAMPLE_MANIFEST)
     File.write(File.join(dir, "main.rb"), SAMPLE_TENANT)
 
-    # The database mount is the operator's to provide; outside a container it
-    # is an ordinary directory the Host writes tenant databases into.
+    # Where the databases live is the operator's to provide; outside a
+    # container it is an ordinary directory the Host writes them into.
     mkdir_p ENV.fetch("WORKERS_DB_DIR", "db")
   end
 end

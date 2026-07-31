@@ -90,9 +90,9 @@ module Workers
       private_constant :BUSY_TIMEOUT
 
       # Opened on first use, so a Tenant that declares a database it never
-      # touches pays nothing, and a mount that cannot be opened reaches tenant
-      # code as a failure it may rescue rather than one that precedes the
-      # invocation.
+      # touches pays nothing, and a database that cannot be opened reaches
+      # tenant code as a failure it may rescue rather than one that precedes
+      # the invocation.
       def connection
         @connection ||= SQLite3::Database.new(@path, results_as_hash: true)
                                          .tap { |db| db.busy_timeout = BUSY_TIMEOUT }

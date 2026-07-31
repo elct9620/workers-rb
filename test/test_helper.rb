@@ -61,8 +61,8 @@ module TestHelper
       RUBY
     end
 
-    # A mount for the Tenants' database files, pointed at for the block.
-    def mounting
+    # Somewhere for the Tenants' databases, pointed at for the block.
+    def storing
       Dir.mktmpdir do |root|
         Workers::Host.set :databases, Workers::Databases.new(root: root)
         yield root

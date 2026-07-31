@@ -52,9 +52,10 @@ DB::Main.execute("insert into visits values (?)", Time.now)
 DB::Main.query("select count(*) as n from visits")   # => [{ "n" => 3 }]
 ```
 
-The files sit flat on the database mount as `<tenant>-<identifier>.db`, so
-no Tenant can name another's. `WORKERS_DB_DIR` points the Host at that mount;
-`rake dev:tenant` creates `db/` for running outside a container.
+Each database is named `<tenant>-<identifier>`, so no Tenant can name
+another's. `WORKERS_DB_DIR` points the Host at where they live — a directory
+of `.db` files today; `rake dev:tenant` creates `db/` for running outside a
+container.
 
 ## Testing
 

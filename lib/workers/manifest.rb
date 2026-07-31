@@ -18,8 +18,8 @@ module Workers
     BINDING_CONSTANT = /\ADB::[A-Z][A-Za-z0-9_]{0,63}\z/
     private_constant :BINDING_CONSTANT
 
-    # No `-`, so the last `-` in `<tenant>-<database>.db` always separates the
-    # two and no two Tenants resolve to one file.
+    # No `-`, so the last `-` in `<tenant>-<database>` always separates the
+    # two and no two Tenants resolve to one database.
     DATABASE_IDENTIFIER = /\A[a-z0-9_]{1,32}\z/
     private_constant :DATABASE_IDENTIFIER
 

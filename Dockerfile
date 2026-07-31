@@ -33,9 +33,10 @@ COPY Gemfile Gemfile.lock config.ru ./
 COPY lib lib
 
 # The Host runs untrusted code, so it holds no more of the machine than it
-# needs to answer a request. The database mount is created here rather than
-# left to the volume: a volume takes the ownership of the directory it covers,
-# and the Host is not the user that would otherwise own it.
+# needs to answer a request. The directory the databases sit in is created
+# here rather than left to the volume: a volume takes the ownership of the
+# directory it covers, and the Host is not the user that would otherwise own
+# it.
 RUN useradd --create-home --shell /usr/sbin/nologin workers \
  && install -d -o workers -g workers /data
 USER workers
