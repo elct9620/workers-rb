@@ -1,10 +1,10 @@
 # The cluster SPEC.md F-08 describes, shrunk onto one machine: several Nodes
-# behind one entry point, all serving the same shared directory, exactly one of
-# them designated the Writer.
+# behind one entry point, all serving the same shared directory and reaching
+# the same databases.
 x-node: &node
   build: .
   image: workers-rb
-  environment: &node-environment
+  environment:
     # A Tenant answers at `<tenant>.workers.test` as well as at `/<tenant>`,
     # so both routing forms can be shown without owning a real domain.
     WORKERS_BASE_DOMAIN: workers.test
@@ -13,10 +13,9 @@ x-node: &node
     # rather than baked in: an edit here reaches the next request on every
     # Node. `rake dev:tenant` writes a sample one.
     - ./app:/app:ro
-    # Stands in for the replicated filesystem the cluster mounts. One volume
-    # for all three Nodes, so a write from any of them is there for the next
-    # request wherever it lands — replication with a lag of its own arrives
-    # when the databases move to libSQL.
+    # Every Node reads and writes every Tenant's database, which one volume
+    # for all three satisfies without anything between them: a write from any
+    # of them is there for the next request wherever it lands.
     - databases:/data
 
 services:
@@ -41,24 +40,14 @@ services:
   node-a:
     <<: *node
     hostname: node-a
-    environment:
-      <<: *node-environment
-      # Designated by configuration, and it does not move with node state.
-      WORKERS_WRITER: "true"
 
   node-b:
     <<: *node
     hostname: node-b
-    environment:
-      <<: *node-environment
-      WORKERS_WRITER: "false"
 
   node-c:
     <<: *node
     hostname: node-c
-    environment:
-      <<: *node-environment
-      WORKERS_WRITER: "false"
 
 volumes:
   databases:

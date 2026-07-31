@@ -7,10 +7,9 @@ placing files in a shared directory, and the Host serves them from inside
 [SPEC.md](SPEC.md) is the target state. What runs today is a three-node local
 cluster: all three routing forms, per-tenant sandboxes, the Runtime Kit, and
 the `Env`, `DB`, `Time`, and `Random` Bindings. The nodes share one database
-mount rather than replicating between them, so a write from any node is there
-for the next request immediately and reaches the local file whatever
-`WORKERS_WRITER` says — replication with a lag of its own, and routing a
-replica's writes to the Writer, arrive when the databases move to libSQL.
+volume, so every node reads and writes every tenant's database and a write is
+there for the next request wherever it lands — with none of the lag an
+arrangement replicating between nodes would carry.
 
 ## Running it
 
@@ -22,8 +21,7 @@ curl localhost:9292/hello       # WORKERS_PORT moves this off 9292
 ```
 
 Three Hosts sit behind one address, taking requests in turn, so consecutive
-calls report a different `Env.node` and only one of them answers `Env.writer?`
-with true.
+calls report a different `Env.node`.
 
 Tenant code lives in `app/<tenant>/` — an `app.json` Manifest and one or more
 `*.rb` files, loaded in filename order. The directory is mounted into every
@@ -72,8 +70,8 @@ bundle exec puma
 ```
 
 What one process cannot show — that every node serves the same tenants, that
-one of them is the Writer, that one address reaches them all — is checked
-against the running cluster instead:
+a write from any of them reaches the rest, that one address reaches them all
+— is checked against the running cluster instead:
 
 ```sh
 docker compose up -d --wait
