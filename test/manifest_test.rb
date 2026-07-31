@@ -40,6 +40,20 @@ class ManifestTest < TestHelper::Case
     JSON
   end
 
+  # Deciding where a request goes means reading what every Tenant published,
+  # so a Manifest the Host cannot act on has to cost its own Tenant the route
+  # and no other. The unroutable one is named to sort first, where a reader
+  # that gave up on the first one it could not act on would be caught.
+  def test_a_manifest_the_host_cannot_act_on_costs_no_other_tenant_its_route
+    serving("sound", body: "answered") do |root|
+      publish(root, "ailing", manifest: '{ "entrypoint": 7 }')
+
+      get "/sound"
+
+      assert_equal "answered", last_response.body
+    end
+  end
+
   def test_an_unroutable_tenant_is_recorded_for_the_operator
     status_for('{ "domain": ["example.com"] }')
 
