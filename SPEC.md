@@ -83,7 +83,7 @@ These roles constitute the system. Later layers use these names exclusively.
 - Compose the request environment from the request and pass it as the Worker's only argument, then hand the returned triplet to the HTTP layer
 - Narrow every Binding's guest-reachable method surface to an explicit allow list
 - Turn a Tenant's execution failure into an HTTP error response for that request
-- Record what an invocation wrote to its output streams, and what it could not reach, where the operator reads
+- Record what an invocation wrote to its output streams, and what it could not reach or could not carry at once, where the operator reads
 
 **Does not:**
 
@@ -215,6 +215,7 @@ These roles constitute the system. Later layers use these names exclusively.
 | B-25 | A Tenant's Binding constant | Resolves only to a database that Tenant declared |
 | B-40 | The Host waits on a Binding's database longer than a wait is given | The wait ends there and the statement fails as an exception the Tenant may rescue |
 | B-41 | The database answers a statement by declining to take more at once | The refusal reaches tenant code as an exception it may rescue, and the Host records that it is asking the database for more than it takes — not that it could not reach it |
+| B-42 | A statement is run while this Host already has as many in flight as it runs at once | It waits for one of them to finish, and if none does within the wait it never leaves: it fails as an exception the Tenant may rescue, and the Host records the shortage as its own rather than as a database it could not reach |
 
 ### F-06 — Runtime Kit
 
@@ -422,7 +423,7 @@ The wall clock is given to one wait rather than to the statement making it: wait
 |-------|-------|------------------|
 | Sandboxes held per Host | 64 Tenants, least recently reached first out | B-39 |
 | Wall clock per wait on a database | 2 seconds | B-40 |
-| Statements in flight per Host | 5 | B-40 |
+| Statements in flight per Host | 5 | B-42 |
 | Attempts given a database that is not answering | 3 | B-34 |
 | Quiet given a database that stopped answering | 60 seconds | B-34 |
 
