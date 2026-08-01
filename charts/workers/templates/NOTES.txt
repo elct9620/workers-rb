@@ -1,0 +1,48 @@
+{{ .Chart.Name }} is installed as {{ .Release.Name }} in {{ .Release.Namespace }}.
+
+Two things reach this release from outside the chart, and neither is installed
+by it.
+
+1. THE GATEWAY
+
+   Nothing outside the cluster reaches a Host yet. Point whatever gives the
+   cluster its one external address — a tunnel, a reverse proxy, a load
+   balancer — at:
+
+       http://{{ include "workers.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local:9292
+
+   Consecutive requests reach the same Host for as long as the Gateway holds
+   one connection open, so which Node answers follows the Gateway's connection
+   handling rather than this Service.
+
+2. THE TENANTS
+
+   The Hosts read the volume behind this claim, and read it only:
+
+       claim: {{ include "workers.sharedClaim" . }}
+
+   A Tenant is one directory at the root of that volume, holding an app.json
+   Manifest and one or more *.rb files — <tenant>/app.json and <tenant>/*.rb.
+   Publish through whatever can write to it: the export it is provisioned
+   from, or a Pod of your own that mounts the claim for writing. A directory
+   added there reaches the next request on every Host, with nothing restarted.
+{{- if eq (int .Values.nodes) 1 }}
+
+   One Host is serving. Every routing form and Binding works, but `Env.node`
+   reports the same Node every time — raise `nodes` to watch a Tenant answer
+   from more than one.
+{{- end }}
+
+Once a Tenant is published, ask a Host for it directly:
+
+    kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "workers.fullname" . }} 9292:9292
+    curl localhost:9292/<tenant>
+
+That reaches one Host for the life of the tunnel, which is enough to see a
+Tenant answer and not enough to see the cluster spread anything.
+{{- if not .Values.databases.deploy }}
+
+The Hosts reach their databases at {{ .Values.databases.url }}, which this
+release does not hold. A Tenant that declared a Binding is answered by the
+Host giving up on it until that server answers.
+{{- end }}
