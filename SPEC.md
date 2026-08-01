@@ -213,7 +213,7 @@ These roles constitute the system. Later layers use these names exclusively.
 | B-21 | Tenant code writes to a Binding | The write completes and returns the affected row count, whichever Node serves the request |
 | B-22 | A later request queries the same Binding after a write | The query reflects that write, whichever Node serves it |
 | B-23 | A statement a Tenant executes against a Binding fails in the database | The failure reaches tenant code as an exception it may rescue |
-| B-24 | A Binding constant the Manifest does not declare | The constant does not exist in the Sandbox and referencing it raises `NameError`, which tenant code may rescue and which stays distinguishable from a declared Binding that is not yet supplied |
+| B-24 | A Binding constant the Manifest does not declare | The constant does not exist in the Sandbox and referencing it raises `NameError`, which tenant code may rescue and which no declared Binding ever raises |
 | B-25 | A Tenant's Binding constant | Resolves only to a database that Tenant declared |
 | B-40 | The Host waits on a Binding's database longer than a wait is given | The wait ends there and the statement fails as an exception the Tenant may rescue |
 | B-41 | The database answers a statement by declining to take more at once | The refusal reaches tenant code as an exception it may rescue, and the Host records that it is asking the database for more than it takes — not that it could not reach it |
@@ -259,7 +259,7 @@ These roles constitute the system. Later layers use these names exclusively.
 | E-07 | The Worker's return value is not a valid Rack response triplet | 500 marked as an invalid response |
 | E-08 | Tenant code exceeds the timeout | 503 marked as a timeout |
 | E-09 | Tenant code exhausts the memory limit | 503 marked as a memory limit |
-| E-10 | Tenant code leaves a Binding failure unrescued — a method outside the allow list, a pending Binding called before it is supplied, or a statement that failed | 500 marked as a binding failure. The Host records what it could not reach, or that more was asked at once than could be carried; a statement the Tenant itself got wrong it records nothing about |
+| E-10 | Tenant code leaves a Binding failure unrescued — a method outside the allow list, or a statement that failed | 500 marked as a binding failure. The Host records what it could not reach, or that more was asked at once than could be carried; a statement the Tenant itself got wrong it records nothing about |
 | E-11 | The shared directory is unreadable | Every Tenant endpoint answers 503; a cached Sandbox does not serve while the directory is unreadable; the Host records what it could not read |
 | E-12 | The Sandbox produces no recognisable result and its execution environment is corrupted | 503 marked as runtime corruption |
 | E-13 | A request carries a body larger than the Host will carry | 413. No Sandbox is reached and no Worker runs, and the Host reads no further than what tells it the body ran past the limit |
@@ -284,7 +284,7 @@ These roles constitute the system. Later layers use these names exclusively.
 | **invocation** | One entrypoint call the Host makes into a Sandbox, corresponding to exactly one HTTP request |
 | **failure class** | The category a failure response carries: compile failure, undefined entrypoint, tenant exception, invalid response, timeout, memory limit, binding failure, or runtime corruption |
 | **trap-class failure** | A failure that leaves the Sandbox unusable: the timeout, the memory limit, or runtime corruption |
-| **supply** | The Host's act of providing a Binding object for the span of one invocation. A pending Binding that is called before it is supplied raises per B-16 |
+| **supply** | The Host's act of providing a Binding object for the span of one invocation. Every Binding a Sandbox declares is supplied before its Worker runs, so a call never reaches one that is not |
 
 ### Contracts
 
