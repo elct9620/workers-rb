@@ -4,6 +4,12 @@ A self-hostable, multi-tenant edge function platform: tenants publish Ruby by
 placing files in a shared directory, and the Host serves them from inside
 [kobako](https://github.com/elct9620/kobako)'s WASM/mruby sandbox.
 
+> [!WARNING]
+> This is a proof of concept, built to demonstrate the idea rather than to
+> carry anyone's traffic. There is no tenant authentication, no control-plane
+> API, and no quota, billing, or cross-tenant fairness — whoever can write to
+> the shared directory is a tenant. Do not run it in production.
+
 [SPEC.md](SPEC.md) is the target state. What runs today is a three-node local
 cluster: all three routing forms, per-tenant sandboxes, the Runtime Kit, and
 the `Env`, `DB`, `Time`, and `Random` Bindings. The nodes reach one database
