@@ -1,6 +1,10 @@
 # How many Hosts answer. Each one is identical — no setting below belongs to
 # one of them rather than another. One Host answers requests; several are what
 # make `Env.node` worth reading.
+#
+# Each Host keeps up to 5 statements in flight and one server holds 128
+# connections open, so raising this far enough has Hosts waiting on the server
+# rather than on their own pool. README sizes the two together.
 nodes: 3
 
 # The suffix under which `<tenant>.<base>` reaches a Tenant. A Tenant also
