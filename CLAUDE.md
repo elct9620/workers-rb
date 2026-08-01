@@ -13,6 +13,7 @@ README's opening states what runs today.
 | `lib/workers/registry.rb` | What constitutes a Tenant under the shared directory, and how many the Host keeps |
 | `lib/workers/tenant.rb` | When a Sandbox is built, reused, and discarded |
 | `lib/workers/guest.rb` | Every Host object tenant code can reach, and the methods it may call on each |
+| `lib/workers/hrana.rb` | How a statement reaches the database server, and which failures are the operator's rather than the Tenant's |
 | `lib/workers/environment.rb` | Which request fields cross into the guest |
 | `lib/workers/manifest.rb` | What `app.json` may say, and what makes a Tenant unroutable |
 | `lib/workers/runtime_kit.rb` | The mruby source every Sandbox carries ahead of tenant files |
@@ -41,8 +42,15 @@ The guest binary is a kobako release asset rather than part of the gem.
 `rake wasm:fetch` pins it to the resolved gem version, so the host side and
 the guest side cannot drift.
 
+The database server is a release asset too. `rake sqld:fetch` pins it and
+clears the versions it supersedes, because `test/sqld.rb` finds it by looking
+in `vendor/` rather than by version. That module starts one server for the
+whole run and ends it three ways — a SIGTERM trap, `at_exit`, and the
+server's own idle timeout for a runner killed outright, which runs neither.
+
 Every test under `test/` drives the real Host through `TestHelper::Case`, which
-resets its class-level configuration first. Rack::Test settles its session on a
+resets its class-level configuration first and drops whatever databases the
+test's Manifests declared afterwards. Rack::Test settles its session on a
 test's first request, so a shared directory chosen inside `app` is the only one
 that test ever reads — `serving` points the Host instead.
 

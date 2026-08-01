@@ -6,10 +6,10 @@ placing files in a shared directory, and the Host serves them from inside
 
 [SPEC.md](SPEC.md) is the target state. What runs today is a three-node local
 cluster: all three routing forms, per-tenant sandboxes, the Runtime Kit, and
-the `Env`, `DB`, `Time`, and `Random` Bindings. The nodes share one database
-volume, so every node reads and writes every tenant's database and a write is
-there for the next request wherever it lands — with none of the lag an
-arrangement replicating between nodes would carry.
+the `Env`, `DB`, `Time`, and `Random` Bindings. The nodes reach one database
+server rather than a disk between them, so every node reads and writes every
+tenant's database and a write is there for the next request wherever it lands
+— and the nodes no longer have to be neighbours to manage it.
 
 ## Running it
 
@@ -53,9 +53,10 @@ DB::Main.query("select count(*) as n from visits")   # => [{ "n" => 3 }]
 ```
 
 Each database is named `<tenant>-<identifier>`, so no Tenant can name
-another's. `WORKERS_DB_DIR` points the Host at where they live — a directory
-of `.db` files today; `rake dev:tenant` creates `db/` for running outside a
-container.
+another's, and the Host has one made the first time a tenant reaches for one
+that is not there yet. `WORKERS_DB_URL` and `WORKERS_DB_ADMIN_URL` point the
+Host at the server holding them — the compose file runs one, and a Host
+started outside a container needs one to point at.
 
 ## Testing
 
@@ -63,8 +64,14 @@ container.
 bundle exec rake
 ```
 
-The suite fetches the guest binary it needs and drives the real Host in
-process. Running one outside a container works the same way:
+The suite fetches the binaries it needs — the guest one and a database server
+— and drives the real Host in process against both, so what the Binding is
+proved against is the server the cluster runs rather than a stand-in. The
+server starts on the first test that needs a database and is gone by the time
+the run is, whichever way the run ended.
+
+Running a Host outside a container works the same way, once something is
+listening where `WORKERS_DB_URL` says:
 
 ```sh
 bundle exec puma
