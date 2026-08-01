@@ -20,6 +20,7 @@ README's opening states what runs today.
 | `lib/workers/runtime_kit.rb` | The mruby source every Sandbox carries ahead of tenant files |
 | `lib/workers/{node,databases,runtime}.rb` | Host configuration, read from the environment while the class body runs |
 | `compose.yaml` + `Caddyfile` | The cluster's shape: how many Nodes, what they share, what stands in front of them |
+| `.github/workflows/ci.yml` | What has to answer before an image reaches GHCR, and which refs get published |
 | `tmp/*.md` | The exploration behind decisions SPEC.md only states. Not in version control |
 
 ## What the code does not say

@@ -1,0 +1,111 @@
+# What one process can prove, what only a running cluster can show, and the
+# image that cluster runs — in that order, so nothing reaches the registry
+# that the suite has not answered for.
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ "v*" ]
+  pull_request:
+
+# A ref needs only its latest run; an earlier one is answering for code
+# nobody will ship.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: RuboCop
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b # v1
+        with:
+          ruby-version: .ruby-version
+          bundler-cache: true
+      # Not part of `rake`, so the suite passing says nothing about style.
+      - run: bundle exec rubocop
+
+  test:
+    name: Host
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b # v1
+        with:
+          ruby-version: .ruby-version
+          bundler-cache: true
+      # The guest binary and the database server are release assets the
+      # Rakefile pins, so a hit is byte for byte what a fetch would download.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: vendor
+          key: vendor-${{ runner.os }}-${{ hashFiles('Rakefile', 'Gemfile.lock') }}
+      - run: bundle exec rake test
+
+  e2e:
+    name: Cluster
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b # v1
+        with:
+          ruby-version: .ruby-version
+          bundler-cache: true
+      # The shared directory is untracked, and every Node mounts it. Written
+      # here first so it belongs to this job rather than to the containers.
+      - run: bundle exec rake e2e:publish
+      - run: docker compose up -d --wait
+      - run: bundle exec rake e2e
+      # A cluster that never came up says why in its own logs, not in the
+      # suite's timeout.
+      - if: failure()
+        run: docker compose logs
+
+  publish:
+    name: GHCR
+    needs: [ lint, test, e2e ]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      # arm64 is built under emulation, which the native gem the sandbox
+      # depends on pays for in build time rather than in a second runner.
+      - uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8 # v4
+      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
+      # A pull request builds to prove the Dockerfile still builds; only a
+      # ref that is ours to publish signs in.
+      - if: github.event_name != 'pull_request'
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6
+        with:
+          images: ghcr.io/${{ github.repository }}
+          # `latest` and `main` follow the branch; a `v*` tag is what an
+          # operator pins a cluster to.
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha
+            type=raw,value=latest,enable={{is_default_branch}}
+      - uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
