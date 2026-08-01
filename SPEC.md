@@ -21,7 +21,7 @@ workers-rb builds a self-hostable, multi-tenant edge function platform on kobako
 | Publish by placing files | After a tenant author adds `/app/<tenant>/` to the shared directory, that tenant's endpoint serves requests without a Host restart or redeploy |
 | Sandbox isolation | Tenant code cannot read the Host's environment variables, filesystem, or network; the Bindings the Host supplies are its only path outward |
 | Data binding | A tenant declares multiple SQLite Bindings in its Manifest and reads and writes them through named constants whatever Node serves the request, and cannot reach another tenant's databases |
-| Node visibility | The same request to the same tenant reads a different `Env.node` on different nodes, while its Binding reads converge on identical results |
+| Node visibility | The same request to the same tenant reads a different `Env.node` on different nodes, while its Binding reads answer identically |
 | Failure containment | An exception, timeout, or memory exhaustion in tenant code affects only that request; the Host process and other tenants' requests are unaffected |
 | Rack compatibility | Tenant code returns a Rack response triplet, which the Host hands to the HTTP layer without semantic translation |
 
@@ -32,8 +32,8 @@ workers-rb builds a self-hostable, multi-tenant edge function platform on kobako
 | Publishing needs no restart | Adding a tenant directory to a running Host makes `GET https://<domain>/<tenant>` respond 200 |
 | The sandbox is closed | Tenant code's attempts to reach environment variables, the filesystem, and the network all fail, and the failures disclose no Host environment content |
 | Tenants are isolated from each other | Tenant A's code cannot obtain any Binding declared by tenant B |
-| Cross-node results converge | Across consecutive requests served by different nodes, `Env.node` differs while queries against the same Binding converge on the same result |
-| Writes work from every node | A request served by any node writes to its Binding successfully, and the write is visible to subsequent requests on the node that served it |
+| Cross-node results agree | Across consecutive requests served by different nodes, `Env.node` differs while queries against the same Binding answer the same |
+| Writes work from every node | A request served by any node writes to its Binding successfully, and the write is visible to subsequent requests whichever node serves them |
 | Failures do not spread | While tenant code loops forever, that request ends 5xx and other tenants' requests keep responding normally |
 
 ### Non-Goals
@@ -42,7 +42,7 @@ workers-rb builds a self-hostable, multi-tenant edge function platform on kobako
 - A control-plane API and tenant authentication — the shared directory is the only deployment interface
 - Bindings other than SQLite (KV, object storage, queues, durable objects)
 - Schema definition and migration for tenant databases — tenant code creates its own tables
-- Strongly consistent reads across Nodes — a write reaches the Nodes that did not serve it in time rather than at once
+- A database replica per Node — every Node reaches one database server, which the Host neither replicates, shards, nor fails over between
 - An online editor, version management, or rollback for tenant code
 - Tenant runtimes other than mruby
 - Reimplementing or wrapping kobako's sandbox semantics — kobako provides the isolation guarantees
@@ -60,6 +60,7 @@ These roles constitute the system. Later layers use these names exclusively.
 | **Binding** | A named Host object supplied into the Sandbox — `Env`, `DB`, `Time`, or `Random` — and tenant code's only path outward | In scope |
 | **Runtime Kit** | mruby helper objects the Host loads into every Sandbox, present regardless of Tenant files | In scope |
 | **Node** | A cluster node running one Host instance; every Node reads and writes every Tenant's databases | In scope |
+| **Gateway** | The cluster's one external address: takes external traffic and spreads it over the Nodes | Operator-deployed — referenced, not designed |
 | **Sandbox** | kobako's mruby execution unit; the Host holds one per Tenant and serves requests through successive invocations | kobako semantics, referenced |
 | **kobako** | The gem providing the WASM/mruby sandbox, Service injection, and error classification | Out of scope — referenced, not designed |
 
@@ -96,8 +97,8 @@ These roles constitute the system. Later layers use these names exclusively.
 **Input assumptions:**
 
 - The shared directory sits on a filesystem every Node mounts; a change made through any Node's mount becomes visible through every other Node's mount. Tenant directories are added and modified by processes outside the Host
-- Every Node reaches every Tenant's SQLite databases for both reading and writing, and a write reaches the Nodes that did not serve it in time
-- External traffic reaches an internal cluster service through a tunnel service; the Host is not exposed to the public network directly
+- Every Node reaches every Tenant's SQLite databases for both reading and writing, at one address they all name
+- External traffic reaches an internal cluster service through the Gateway; the Host is not exposed to the public network directly
 
 **Output guarantees:**
 
@@ -109,7 +110,7 @@ These roles constitute the system. Later layers use these names exclusively.
 #### Control — what the Host controls / depends on
 
 - **Controls:** route resolution, Sandbox lifecycle, the content and method surface of each Binding, the creation of each Binding's database, and the mapping from failure to HTTP status
-- **Depends on:** kobako's isolation and error classification, the Sandbox's mruby build providing JSON generation and ASCII Regexp, the storage backing the Tenants' databases being reachable for reading and writing from every Node, the readability of shared storage, the hostname the operating system reports for this Node, and the tunnel service's external connectivity
+- **Depends on:** kobako's isolation and error classification, the Sandbox's mruby build providing JSON generation and ASCII Regexp, the database server holding the Tenants' databases being reachable for reading and writing from every Node, the readability of the shared directory, the hostname the operating system reports for this Node, and the Gateway's external connectivity
 
 ### Feature List
 
@@ -136,18 +137,18 @@ These roles constitute the system. Later layers use these names exclusively.
 
 - **Context:** The Tenant is live
 - **Action:** Declare a Binding in the Manifest, then query and write it from tenant code
-- **Outcome:** The query returns rows and the write is visible to later requests on the node that served it; the code cannot reach a Binding declared by another Tenant
+- **Outcome:** The query returns rows and the write is visible to later requests whichever Node serves them; the code cannot reach a Binding declared by another Tenant
 
 #### J-03 — A technology evaluator compares cross-node behavior
 
 - **Context:** The cluster has several Nodes and one Tenant is live
 - **Action:** Issue consecutive requests to one endpoint and compare `Env.node` against the Binding query results
-- **Outcome:** `Env.node` tracks the serving Node, queries against the same Binding converge on the same result, and writes succeed from any Node
+- **Outcome:** `Env.node` tracks the serving Node, queries against the same Binding answer the same, and writes succeed from any Node
 
 #### J-04 — A platform operator deploys the cluster
 
-- **Context:** A multi-node cluster is available, with a shared filesystem for the tenant directory and storage every Node reaches for the databases
-- **Action:** Deploy the Host workload, mount the shared directory, point each Host at the database storage, and point the tunnel at the internal service
+- **Context:** A multi-node cluster is available, with a shared filesystem for the tenant directory and a database server every Node reaches
+- **Action:** Deploy the Host workload, mount the shared directory, point each Host at the database server, and point the Gateway at the internal service
 - **Outcome:** Requests to the external domain reach a Host on any Node and are answered, and a write succeeds whichever Node serves it
 
 #### J-05 — Tenant code fails
@@ -205,7 +206,7 @@ These roles constitute the system. Later layers use these names exclusively.
 | B-19 | A declared Binding's database does not exist + the Binding is supplied | The Host creates it, then supplies it |
 | B-20 | Tenant code queries a Binding | Returns an Array of rows, each a Hash of column name to value |
 | B-21 | Tenant code writes to a Binding | The write completes and returns the affected row count, whichever Node serves the request |
-| B-22 | A later request queries the same Binding after a write | The query reflects that write immediately on the Node that served the write, and on every other Node in time; until then those Nodes read the previous value |
+| B-22 | A later request queries the same Binding after a write | The query reflects that write, whichever Node serves it |
 | B-23 | A statement a Tenant executes against a Binding fails in the database | The failure reaches tenant code as an exception it may rescue |
 | B-24 | A Binding constant the Manifest does not declare | The constant does not exist in the Sandbox and referencing it raises `NameError`, which tenant code may rescue and which stays distinguishable from a declared Binding that is not yet supplied |
 | B-25 | A Tenant's Binding constant | Resolves only to a database that Tenant declared |
@@ -225,7 +226,7 @@ These roles constitute the system. Later layers use these names exclusively.
 |----|-------------------|--------|
 | B-30 | The Worker returns a valid Rack response triplet | The Host hands it to the HTTP layer unchanged |
 | B-31 | Any failure in any Tenant | Other Tenants' requests are unaffected and the Host process keeps running |
-| B-32 | A trap-class failure | The Tenant's Sandbox is discarded and the next request rebuilds it per B-09, and that Tenant's other in-flight invocations end with the same failure class |
+| B-32 | A trap-class failure | The Tenant's Sandbox is discarded and the next request rebuilds it per B-09; that Tenant's other in-flight invocations reach their own outcome, unaffected |
 | B-33 | Any failure response | Carries no Host environment variable, filesystem path, or internal address; a failure in tenant execution additionally carries its failure class |
 | B-34 | A Binding's database stops answering + requests to that Tenant keep arriving | The Host stops reaching for it, and those requests end without waiting on it; once it answers again, that Tenant reaches it again, with nothing restarted |
 
@@ -235,7 +236,7 @@ These roles constitute the system. Later layers use these names exclusively.
 |----|-------------------|--------|
 | B-35 | The Host workload runs on several Nodes + the shared directory is mounted on each | Every Node sees the same set of Tenants |
 | B-36 | The Host workload runs on several Nodes + a Tenant declares a Binding | Every Node reads and writes that Tenant's database |
-| B-37 | The tunnel service points at the internal service | Requests to the external domain reach a Host on any Node |
+| B-37 | The Gateway points at the internal service | Requests to the external domain reach a Host on any Node |
 
 ### Error Scenarios
 
@@ -272,6 +273,7 @@ These roles constitute the system. Later layers use these names exclusively.
 | **Binding** | A named Host object supplied into a Sandbox. `Env` carries node and request information; `DB::*` carries a SQLite database; `Time` carries the Host's clock; `Random` carries the Host's entropy |
 | **Runtime Kit** | The mruby helper objects the Host loads into every Sandbox |
 | **Node** | A cluster node running one Host |
+| **Gateway** | Whatever the operator puts in front of the Nodes to give the cluster one external address — a reverse proxy, a tunnel, a load balancer. Never written "entrypoint", which always names the Worker's constant |
 | **invocation** | One entrypoint call the Host makes into a Sandbox, corresponding to exactly one HTTP request |
 | **failure class** | The category a failure response carries: compile failure, undefined entrypoint, tenant exception, invalid response, timeout, memory limit, binding failure, or runtime corruption |
 | **trap-class failure** | A failure that leaves the Sandbox unusable: the timeout, the memory limit, or runtime corruption |

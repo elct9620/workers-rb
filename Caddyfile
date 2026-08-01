@@ -1,5 +1,6 @@
-# The tunnel's stand-in for the local cluster: one address in front of every
-# Node, matching SPEC.md B-37.
+# The local cluster's Gateway: one address in front of every Node, matching
+# SPEC.md B-37. A reverse proxy is what that role is here; a tunnel or a load
+# balancer would answer for it just as well.
 #
 # A Tenant reaches the cluster under a domain it declares for itself, so the
 # set of hostnames is not knowable here. The proxy answers to all of them and
