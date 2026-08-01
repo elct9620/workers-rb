@@ -7,6 +7,13 @@ require "sqld"
 # What the Host gets back from a database it reaches over the network, driven
 # against the server the cluster runs rather than a description of it.
 class HranaTest < Minitest::Test
+  # A statement that ran and returned nothing, as the server would put it.
+  ANSWER = JSON.generate(
+    "results" => [ { "type" => "ok",
+                     "response" => { "type" => "execute",
+                                     "result" => { "cols" => [], "rows" => [], "affected_row_count" => 0 } } } ]
+  )
+
   # A database of this test's own, and empty however often the suite has run
   # before: what one test wrote would otherwise be the next one's first row.
   def setup
@@ -65,6 +72,21 @@ class HranaTest < Minitest::Test
   # creates it — `setup` made sure of the opposite.
   def test_a_database_nobody_created_is_there_for_the_first_statement
     assert_equal [], database.query("select 1 where 0", [])
+  end
+
+  # A statement that had to wait for its database to be created reaches it
+  # down a connection the server is still holding — not the one it was told
+  # there was no such database on, which the server has since let go. Nothing
+  # here is the statement sent twice: the refusal was the server saying it
+  # never ran.
+  def test_a_database_the_host_created_is_reached_down_a_connection_the_server_kept
+    errors = StringIO.new
+    created = Workers::Hrana.new(url: "http://127.0.0.1:#{Unresponsive.letting_go(ANSWER)}",
+                                 admin_url: "http://127.0.0.1:#{Unresponsive.obliging}",
+                                 namespace: "created", errors: errors)
+
+    assert_equal [], created.query("select 1 where 0", [])
+    assert_empty errors.string
   end
 
   def test_a_database_the_host_cannot_reach_is_recorded_for_the_operator

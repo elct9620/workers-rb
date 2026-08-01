@@ -27,6 +27,11 @@ module Workers
     TIMEOUT = 2
     private_constant :TIMEOUT
 
+    # The server has not heard of this database. Supplying one the Manifest
+    # declared is the Host's own errand, so this never reaches the Tenant.
+    UNKNOWN = "404"
+    private_constant :UNKNOWN
+
     # The database answered, and what it said was that it will not do this
     # now. An operator told "cannot reach" would go looking at the network
     # rather than at how much is being asked of it.
@@ -75,36 +80,56 @@ module Workers
 
     # A database the Manifest declared exists by the time it is supplied, so a
     # server that has not heard of it is told once and asked again.
+    #
+    # Asking again is not the statement sent twice: being told there is no
+    # such database is the server's own word that it never ran it. But the
+    # connection that was told so is one the server ends the moment the
+    # database appears, so the second attempt is finished with it first and
+    # travels down its replacement.
     def pipeline(body)
-      answer = post(@url, PIPELINE, body)
-      return answer unless answer.code == "404"
+      holding(@url) do |http|
+        answer = post(http, PIPELINE, body)
+        next answer unless answer.code == UNKNOWN
 
-      create
-      post(@url, PIPELINE, body)
+        create
+        http.finish
+        post(http, PIPELINE, body)
+      end
     end
 
     # Another invocation may have created it first, which answers as a refusal
     # and leaves exactly what was wanted.
-    def create = post(@admin_url, "/v1/namespaces/#{@namespace}/create", {})
+    def create = holding(@admin_url) { |http| post(http, "/v1/namespaces/#{@namespace}/create", {}) }
 
-    def post(address, path, body)
+    # Reused rather than opened per statement: a Host that opened one every
+    # time runs out of local ports long before the database runs out of
+    # capacity. Held for one request, or for the two a database that had to be
+    # created takes, and no longer.
+    def holding(address)
+      pool(address).with { |http| yield http }
+    rescue ConnectionPool::TimeoutError => e
+      failed("cannot reach #{where}: #{e.message}")
+    end
+
+    def post(http, path, body)
       request = Net::HTTP::Post.new(path, "content-type" => "application/json")
       # The server reads the first label as the database's name, so this is
       # the namespace at the server rather than a hostname anything resolves.
       request["Host"] = "#{@namespace}.#{@url.host}"
       request.body = JSON.generate(body)
 
-      # Reused rather than opened per statement: a Host that opened one every
-      # time runs out of local ports long before the database runs out of
-      # capacity. Whether the connection it is handed is still good is
-      # Net::HTTP's to decide — it reconnects on a socket the server closed,
-      # on one idle past its keep-alive, and on one left at EOF.
-      light.run { pool(address).with { |http| http.request(request) } }
+      light.run do
+        # A connection the Host was finished with is opened here rather than
+        # where it was put down, so that opening one counts as reaching the
+        # database like everything else this waits on.
+        http.start unless http.started?
+        http.request(request)
+      end
     rescue Stoplight::Error::RedLight
       # Already known to be unreachable, and already said so. Waiting to find
       # out again is what would cost this request and the database both.
       raise DatabaseError, "the database is unavailable"
-    rescue SystemCallError, IOError, Timeout::Error, ConnectionPool::TimeoutError => e
+    rescue SystemCallError, IOError, Timeout::Error => e
       failed("cannot reach #{where}: #{e.message}")
     end
 
@@ -121,7 +146,6 @@ module Workers
         POOLS["#{address.host}:#{address.port}"] ||= ConnectionPool.new(size: @pool, timeout: TIMEOUT) {
           Net::HTTP.new(address.host, address.port).tap do |http|
             http.open_timeout = http.read_timeout = TIMEOUT
-            http.start
           end
         }
       end
