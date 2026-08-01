@@ -10,6 +10,10 @@ gem "kobako", "~> 0.21.1"
 gem "puma", "~> 8.0"
 gem "sinatra", "~> 4.2"
 
+# The Host reaches the databases over HTTP, and a connection per statement
+# runs out of local ports long before the server runs out of capacity.
+gem "connection_pool", "~> 3.0"
+
 group :development do
   gem "minitest", "~> 6.0"
   gem "rack-test", "~> 2.2"

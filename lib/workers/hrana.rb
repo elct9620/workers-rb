@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require "connection_pool"
 require "json"
 require "net/http"
 require "uri"
@@ -30,10 +31,18 @@ module Workers
     TOO_MANY = "429"
     private_constant :TOO_MANY
 
-    def initialize(url:, admin_url:, namespace:, errors: nil)
+    # One pool per address, for the life of the Host. A Binding lasts one
+    # invocation, so anything held per Binding would be opened and dropped
+    # once per statement — which is what this exists to stop.
+    POOLS = {}
+    LOCK = Mutex.new
+    private_constant :POOLS, :LOCK
+
+    def initialize(url:, admin_url:, namespace:, pool: 5, errors: nil)
       @url = URI(url)
       @admin_url = URI(admin_url)
       @namespace = namespace
+      @pool = pool
       @errors = errors
     end
 
@@ -82,12 +91,27 @@ module Workers
       request["Host"] = "#{@namespace}.#{@url.host}"
       request.body = JSON.generate(body)
 
-      # Closed with the statement that opened it: a Host serving many Tenants
-      # would otherwise hold a socket for every one it had ever answered.
-      Net::HTTP.start(address.host, address.port,
-                      open_timeout: TIMEOUT, read_timeout: TIMEOUT) { |http| http.request(request) }
-    rescue SystemCallError, IOError, Timeout::Error => e
+      # Reused rather than opened per statement: a Host that opened one every
+      # time runs out of local ports long before the database runs out of
+      # capacity. Whether the connection it is handed is still good is
+      # Net::HTTP's to decide — it reconnects on a socket the server closed,
+      # on one idle past its keep-alive, and on one left at EOF.
+      pool(address).with { |http| http.request(request) }
+    rescue SystemCallError, IOError, Timeout::Error, ConnectionPool::TimeoutError => e
       failed("cannot reach #{where}: #{e.message}")
+    end
+
+    # Checking out blocks while every connection is busy, which is what keeps
+    # one Host from asking more of the database at once than it said it would.
+    def pool(address)
+      LOCK.synchronize do
+        POOLS["#{address.host}:#{address.port}"] ||= ConnectionPool.new(size: @pool, timeout: TIMEOUT) {
+          Net::HTTP.new(address.host, address.port).tap do |http|
+            http.open_timeout = http.read_timeout = TIMEOUT
+            http.start
+          end
+        }
+      end
     end
 
     # Reaching the database at all is the Host's side of the contract, so a

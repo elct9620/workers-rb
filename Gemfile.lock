@@ -121,6 +121,7 @@ PLATFORMS
   x86_64-linux-musl
 
 DEPENDENCIES
+  connection_pool (~> 3.0)
   kobako (~> 0.21.1)
   minitest (~> 6.0)
   puma (~> 8.0)
