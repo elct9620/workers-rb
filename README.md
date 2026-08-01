@@ -12,10 +12,9 @@ placing files in a shared directory, and the Host serves them from inside
 
 [SPEC.md](SPEC.md) is the target state. What runs today is a three-node local
 cluster: all three routing forms, per-tenant sandboxes, the Runtime Kit, and
-the `Env`, `DB`, `Time`, and `Random` Bindings. The nodes reach one database
-server rather than a disk between them, so every node reads and writes every
-tenant's database and a write is there for the next request wherever it lands
-— and the nodes no longer have to be neighbours to manage it.
+the `Env`, `DB`, `Time`, and `Random` Bindings. The nodes name one database
+server between them, so every node reads and writes every tenant's database
+and a write is there for the next request wherever it lands.
 
 ## Running it
 
@@ -150,4 +149,35 @@ App = ->(env) {
   req = Request.new(env)
   Response.json({ "node" => Env.node, "path" => req.path })
 }
+```
+
+## What a failure costs
+
+One set of limits holds every tenant to the same bound; a Manifest does not
+move them.
+
+| Limit | Value | What the caller gets |
+|-------|-------|----------------------|
+| Wall clock per invocation | 5 seconds | 503, marked as a timeout |
+| Memory per invocation | 16 MiB | 503, marked as a memory limit |
+| Request body | 512 KiB | 413, before any Worker runs |
+
+The body limit is held at the address in front of the cluster and again at
+each Host, so a node reached directly is still a node that refuses an
+oversized body — and refuses it before reading it.
+
+A failure is one request's outcome. Tenant code that raises, loops forever, or
+returns something that is not a Rack triplet ends that request 5xx carrying
+its failure class, and beyond that nothing from outside the sandbox — no Host
+path, no environment, no internal address. The other tenants keep answering
+and the Host process keeps running. A failure that leaves the sandbox unusable
+has it discarded, and that tenant's next request builds a new one.
+
+Since nothing a Worker writes reaches the response, whatever it puts on
+standard output or error lands in the log of the node that ran it, named by
+the tenant it came from — which is the only thing a tenant author has to debug
+with:
+
+```sh
+docker compose logs node-a    # hello out: about to query
 ```
