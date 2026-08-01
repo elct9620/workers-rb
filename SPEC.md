@@ -76,13 +76,14 @@ These roles constitute the system. Later layers use these names exclusively.
 
 - Discover Tenants under the shared directory, and read and validate their Manifests
 - Resolve a request to exactly one Tenant by either path form or Host header form
-- Hold, per Tenant, a Sandbox loaded with the Runtime Kit and that Tenant's source, and rebuild it after its files change
+- Hold, per Tenant, a Sandbox loaded with the Runtime Kit and that Tenant's source, rebuild it after its files change, and let go of the ones least recently reached once it holds more than it keeps
 - Supply `Env` and each `DB` Binding declared in the Manifest for the duration of one invocation
 - Create a declared Binding's database when it does not exist
 - Supply the `Time` and `Random` Bindings, which read the Host's clock and entropy
 - Compose the request environment from the request and pass it as the Worker's only argument, then hand the returned triplet to the HTTP layer
 - Narrow every Binding's guest-reachable method surface to an explicit allow list
 - Turn a Tenant's execution failure into an HTTP error response for that request
+- Record what an invocation wrote to its output streams, and what it could not reach, where the operator reads
 
 **Does not:**
 
@@ -189,6 +190,8 @@ These roles constitute the system. Later layers use these names exclusively.
 | B-12 | Concurrent requests to one Tenant | They share that Tenant's Sandbox; each invocation holds its own Bindings, output captures, and resource usage |
 | B-13 | Any invocation ends | That invocation's supplied Bindings and output captures end with it and do not carry into the next |
 | B-14 | Tenant code reads the clock or draws a random number | The `Time` and `Random` Bindings supply them from the Host's clock and entropy; environment variables, filesystem paths, and network connections stay unreachable |
+| B-38 | Tenant code writes to the standard output or error stream during an invocation | The Host records what it wrote where the operator reads, naming the Tenant it came from. No part of it reaches the response |
+| B-39 | More Tenants have been reached than the Host holds Sandboxes for | The least recently reached Tenant's Sandbox is discarded; that Tenant stays routable and its next request rebuilds per B-09 |
 
 ### F-04 — Env Binding
 
@@ -210,6 +213,8 @@ These roles constitute the system. Later layers use these names exclusively.
 | B-23 | A statement a Tenant executes against a Binding fails in the database | The failure reaches tenant code as an exception it may rescue |
 | B-24 | A Binding constant the Manifest does not declare | The constant does not exist in the Sandbox and referencing it raises `NameError`, which tenant code may rescue and which stays distinguishable from a declared Binding that is not yet supplied |
 | B-25 | A Tenant's Binding constant | Resolves only to a database that Tenant declared |
+| B-40 | A statement outlasts the statement limit, whether waiting for the database to answer or for a statement ahead of it | It fails as an exception the Tenant may rescue, rather than running the invocation's own clock out |
+| B-41 | The database answers a statement by declining to take more at once | The refusal reaches tenant code as an exception it may rescue, and the Host records that it is asking the database for more than it takes — not that it could not reach it |
 
 ### F-06 — Runtime Kit
 
@@ -256,6 +261,7 @@ These roles constitute the system. Later layers use these names exclusively.
 | E-12 | A write to a Binding cannot be completed | 500 marked as a binding failure; the Host records what it could not reach |
 | E-13 | The shared directory is unreadable | Every Tenant endpoint answers 503; a cached Sandbox does not serve while the directory is unreadable; the Host records what it could not read |
 | E-14 | The Sandbox produces no recognisable result and its execution environment is corrupted | 503 marked as runtime corruption |
+| E-15 | Tenant code leaves a declined statement unrescued | 500 marked as a binding failure; the Host records that it is asking the database for more than it takes |
 
 ---
 
@@ -289,7 +295,8 @@ The operator supplies these to each Host as environment variables. They are clus
 |---------|---------|
 | Base domain | The suffix under which `<tenant>.<base>` resolves per B-07 |
 | Shared directory | The mount path holding `/app/<tenant>/` |
-| Database location | Where this Host reaches the Tenants' databases |
+| Database address | Where this Host runs a Tenant's statements |
+| Database admin address | Where this Host has a declared database made per B-19 |
 
 #### Manifest
 
@@ -408,6 +415,17 @@ One set of limits applies to every Tenant; a Manifest does not alter them.
 | Wall clock per invocation | 5 seconds | E-08 |
 | Memory per invocation | 16 MiB | E-09 |
 | Captured output per invocation | 64 KiB each for the standard output and error streams | Output is clipped; the request still completes |
+
+#### Host limits
+
+What one Host holds and how long it waits. The statement limit stays under the wall clock per invocation by enough for a Worker to answer the failure.
+
+| Limit | Value | When it runs out |
+|-------|-------|------------------|
+| Sandboxes held per Host | 64 Tenants, least recently reached first out | B-39 |
+| Wall clock per statement | 2 seconds | B-40 |
+| Statements in flight per database address | 5 | B-40 |
+| Quiet given a database that stopped answering | 60 seconds | B-34 |
 
 #### Database naming
 
