@@ -17,10 +17,18 @@ module Workers
     PIPELINE = "/v2/pipeline"
     private_constant :PIPELINE
 
-    # The same bound the invocation has, so a database that stopped answering
-    # cannot hold a request open past the point its Worker was allowed to run.
-    TIMEOUT = 5
+    # A statement has to give up before the invocation waiting on it does.
+    # Given the same bound, the invocation's own clock runs out first and the
+    # Worker is cut short instead of being handed a failure it could rescue —
+    # so this stays under `Runtime`'s limit by enough for a Worker to answer.
+    TIMEOUT = 2
     private_constant :TIMEOUT
+
+    # The database answered, and what it said was that it will not do this
+    # now. An operator told "cannot reach" would go looking at the network
+    # rather than at how much is being asked of it.
+    TOO_MANY = "429"
+    private_constant :TOO_MANY
 
     def initialize(url:, admin_url:, namespace:, errors: nil)
       @url = URI(url)
@@ -86,6 +94,7 @@ module Workers
     # failure there is the operator's to see. What the statement itself did is
     # the Tenant's, and never reaches here.
     def answered(response)
+      declined if response.code == TOO_MANY
       failed("#{where} answered #{response.code}") unless response.is_a?(Net::HTTPSuccess)
 
       statement = JSON.parse(response.body).fetch("results").first.to_h
@@ -102,6 +111,14 @@ module Workers
     def failed(detail)
       @errors&.puts(detail)
       raise DatabaseError, "the database is unavailable"
+    end
+
+    # Nothing is wrong with the database or the statement: more is being
+    # asked of it at once than it will take. The Host is the side that can
+    # ask for less, so this is the operator's to read.
+    def declined
+      @errors&.puts("#{where} is taking no more statements at once")
+      raise DatabaseBusy, "the database is busy"
     end
 
     def where = "#{@url}/#{@namespace}"

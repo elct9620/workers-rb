@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require "unresponsive"
 require "sqld"
 
 # What the Host gets back from a database it reaches over the network, driven
@@ -75,6 +76,31 @@ class HranaTest < Minitest::Test
 
     assert_includes errors.string, "127.0.0.1:1"
     refute_includes error.message, "127.0.0.1", "the address reached the Tenant"
+  end
+
+  # A database that refuses the connection fails at once; one that takes it
+  # and then says nothing is what the invocation's own clock would otherwise
+  # run out on, leaving the Worker cut short rather than able to rescue.
+  def test_a_database_that_stops_answering_gives_up_before_the_invocation_would
+    silent = Unresponsive.silent
+    stranded = Workers::Hrana.new(url: "http://127.0.0.1:#{silent}", admin_url: "http://127.0.0.1:#{silent}",
+                                  namespace: "stranded")
+
+    at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    assert_raises(Workers::DatabaseError) { stranded.query("select 1", []) }
+    waited = Process.clock_gettime(Process::CLOCK_MONOTONIC) - at
+
+    assert_operator waited, :<, Workers::Runtime.default.timeout,
+                    "the statement outlasted what the invocation is allowed"
+  end
+
+  def test_a_database_that_declines_is_not_one_the_host_could_not_reach
+    errors = StringIO.new
+    busy = Workers::Hrana.new(url: "http://127.0.0.1:#{Unresponsive.declining(429)}", admin_url: "http://127.0.0.1:1",
+                              namespace: "busy", errors: errors)
+
+    assert_raises(Workers::DatabaseBusy) { busy.query("select 1", []) }
+    refute_includes errors.string, "cannot reach"
   end
 
   private

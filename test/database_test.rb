@@ -2,6 +2,7 @@
 
 require "test_helper"
 require "json"
+require "unresponsive"
 
 # What a Tenant reaches through a Binding it declared, and what it does not
 # reach through one it did not.
@@ -145,6 +146,26 @@ class DatabaseTest < TestHelper::Case
       assert_includes recorded, "stranded-main"
       assert_includes recorded, UNREACHABLE
       refute_includes last_response.body, UNREACHABLE
+    end
+  end
+
+  # A database that says nothing is the one the invocation's own clock would
+  # otherwise run out on, and a Worker cut short is a Worker that never got
+  # the chance to rescue. The statement gives up first, so what comes back is
+  # the Binding's failure rather than the Tenant's time being up.
+  def test_a_database_that_stops_answering_is_a_binding_failure_not_a_timeout
+    silent = Unresponsive.silent
+    Workers::Host.set :databases,
+                      Workers::Databases.new(url: "http://127.0.0.1:#{silent}",
+                                             admin_url: "http://127.0.0.1:#{silent}")
+
+    serving("stranded", manifest: MAIN, source: <<~RUBY) do
+      App = ->(env) { DB::Main.query("select 1") }
+    RUBY
+      get "/stranded"
+
+      assert_equal 500, last_response.status
+      assert_equal "binding_failure", last_response.body.strip
     end
   end
 

@@ -17,6 +17,12 @@ module Workers
   # left unrescued either ends the request as a binding failure.
   class DatabaseError < StandardError; end
 
+  # A database that answered by declining. It is reachable and the statement
+  # is sound; there is simply more being asked of it at once than it takes.
+  # A Tenant rescues it like any other, and the Host reads it as a reason to
+  # ask for less rather than as something broken.
+  class DatabaseBusy < DatabaseError; end
+
   # The category a failed invocation answers with. kobako's errors say what
   # broke inside the Sandbox; a Failure says it in the Tenant's own terms and
   # carries the status that goes with it — 503 where the Sandbox was cut short
