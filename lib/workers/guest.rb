@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 require "securerandom"
-require "sqlite3"
 
 module Workers
   # The Host objects tenant code can reach. Every one of them narrows its
@@ -52,58 +51,26 @@ module Workers
     end
 
     # One SQLite database a Tenant declared, reachable under the constant the
-    # Manifest gave it. The Host resolves the file, so tenant code names a
-    # Binding rather than a path and reaches no database it did not declare.
+    # Manifest gave it. The Host resolves which database that is, so tenant
+    # code names a Binding rather than an address and reaches no database it
+    # did not declare.
+    #
+    # Reaching it is the client's; what stays here is the surface, so nothing
+    # the protocol needs of itself is a method the guest could find.
     class Database
       include AllowList
 
       reachable :query, :execute
 
-      def initialize(path, errors: nil)
-        @path = path
-        @errors = errors
+      def initialize(client)
+        @client = client
       end
 
       # An Array of rows, each a Hash of column name to value.
-      def query(sql, *params) = connection.execute(sql, params)
+      def query(sql, *params) = @client.query(sql, params)
 
       # The rows the statement affected.
-      def execute(sql, *params)
-        connection.execute(sql, params)
-        connection.changes
-      end
-
-      # Not reachable from the guest — the allow list omits it — so the Host
-      # closes what one invocation opened without tenant code being able to.
-      def close
-        @connection&.close
-        @connection = nil
-      end
-
-      private
-
-      # Concurrent invocations of one Tenant each hold their own connection to
-      # the same file, so a write meeting another's lock waits rather than
-      # failing. The wait outlasts no request: the invocation's own wall clock
-      # is what ends it.
-      BUSY_TIMEOUT = 5_000
-      private_constant :BUSY_TIMEOUT
-
-      # Opened on first use, so a Tenant that declares a database it never
-      # touches pays nothing, and a database that cannot be opened reaches
-      # tenant code as a failure it may rescue rather than one that precedes
-      # the invocation.
-      def connection
-        @connection ||= SQLite3::Database.new(@path, results_as_hash: true)
-                                         .tap { |db| db.busy_timeout = BUSY_TIMEOUT }
-      rescue SQLite3::Exception => e
-        # Reaching the database at all is the Host's side of the contract, so
-        # this failure is the operator's to see — a statement the Tenant got
-        # wrong is not, and never reaches here. What the guest gets is
-        # unchanged either way.
-        @errors&.puts("cannot open #{@path}: #{e.message}")
-        raise
-      end
+      def execute(sql, *params) = @client.execute(sql, params)
     end
 
     # The guest's mruby build defines no `Time`, so the Host supplies one.

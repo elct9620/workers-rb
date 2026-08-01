@@ -33,8 +33,6 @@ module Workers
     rescue Kobako::TrapError
       discard
       raise
-    ensure
-      supplied&.each_value(&:close)
     end
 
     private

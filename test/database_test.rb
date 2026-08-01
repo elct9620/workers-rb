@@ -8,6 +8,10 @@ require "json"
 class DatabaseTest < TestHelper::Case
   MAIN = '{ "bindings": { "db": { "DB::Main": "main" } } }'
 
+  # Nothing listens here, so a Host pointed at it reaches for a database and
+  # finds no server at all.
+  UNREACHABLE = "127.0.0.1:1"
+
   def test_a_declared_binding_answers_a_query_with_rows_of_columns
     answering(<<~RUBY) do
       DB::Main.execute("create table if not exists notes (id integer, note text)")
@@ -38,12 +42,15 @@ class DatabaseTest < TestHelper::Case
     end
   end
 
+  # An operator looking for a Tenant's database has only the Manifest to go
+  # on, so what the two names resolve to is a contract rather than a detail.
   def test_a_database_takes_its_name_from_the_tenant_and_the_identifier
-    storing do |root|
+    storing do
       serving("keeper", manifest: MAIN, source: probing('DB::Main.execute("create table t (n integer)")')) do
         get "/keeper"
 
-        assert_equal [ "keeper-main.db" ], Dir.children(root)
+        assert_equal 200, last_response.status
+        assert_equal [ { "n" => 0 } ], reaching("keeper-main", "select count(*) as n from t")
       end
     end
   end
@@ -93,8 +100,9 @@ class DatabaseTest < TestHelper::Case
     end
   end
 
-  # Each invocation holds its own connection to the one file, so a write that
-  # meets another's lock waits for it rather than answering a failure.
+  # Each invocation reaches the one database on its own, and the server is
+  # what puts the writes in an order, so none of them answers a failure for
+  # having arrived while another was being served.
   def test_concurrent_invocations_writing_one_database_all_complete
     storing do
       serving("busy", manifest: MAIN, source: probing(<<~RUBY)) do
@@ -114,8 +122,8 @@ class DatabaseTest < TestHelper::Case
     end
   end
 
-  def test_a_database_the_host_cannot_open_is_a_binding_failure
-    Workers::Host.set :databases, Workers::Databases.new(root: "/no/such/place")
+  def test_a_database_the_host_cannot_reach_is_a_binding_failure
+    stranding
 
     serving("stranded", manifest: MAIN, source: <<~RUBY) do
       App = ->(env) { DB::Main.query("select 1") }
@@ -129,16 +137,28 @@ class DatabaseTest < TestHelper::Case
 
   # Reaching the database at all is the Host's side of the contract. The
   # caller learns nothing it could act on, so the operator has to.
-  def test_a_database_the_host_cannot_open_is_recorded_for_the_operator
-    Workers::Host.set :databases, Workers::Databases.new(root: "/no/such/place")
+  def test_a_database_the_host_cannot_reach_is_recorded_for_the_operator
+    stranding
 
     serving("stranded", manifest: MAIN, source: <<~RUBY) do
       App = ->(env) { DB::Main.query("select 1") }
     RUBY
       get "/stranded"
 
-      assert_includes recorded, "/no/such/place/stranded-main.db"
-      refute_includes last_response.body, "/no/such/place"
+      assert_includes recorded, "stranded-main"
+      assert_includes recorded, UNREACHABLE
+      refute_includes last_response.body, UNREACHABLE
+    end
+  end
+
+  # A Tenant that rescues an unreachable database learns that it is
+  # unavailable, and not one thing about where the Host went looking.
+  def test_a_database_the_host_cannot_reach_tells_the_tenant_nothing_of_where
+    stranding
+
+    serving("subject", manifest: MAIN, source: probing('DB::Main.query("select 1")')) do
+      refute_nil body["error"]
+      refute_includes body["message"], UNREACHABLE
     end
   end
 
@@ -153,6 +173,17 @@ class DatabaseTest < TestHelper::Case
   end
 
   private
+
+  def stranding
+    Workers::Host.set :databases,
+                      Workers::Databases.new(url: "http://#{UNREACHABLE}", admin_url: "http://#{UNREACHABLE}")
+  end
+
+  # A database reached the way nothing but the Host reaches it, so which one
+  # the Host wrote to is read rather than assumed.
+  def reaching(namespace, sql)
+    Workers::Hrana.new(url: Sqld.url, admin_url: Sqld.admin_url, namespace: namespace).query(sql, [])
+  end
 
   # A Worker that answers with whatever the statements evaluated to, or with
   # the class of whatever they raised.

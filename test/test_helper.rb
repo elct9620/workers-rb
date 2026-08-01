@@ -6,6 +6,7 @@ require "minitest/autorun"
 require "rack/test"
 require "tmpdir"
 
+require "sqld"
 require "workers"
 
 module TestHelper
@@ -23,6 +24,15 @@ module TestHelper
       Workers::Host.set :node, Workers::Node.current
       Workers::Host.set :databases, Workers::Databases.current
       Workers::Host.set :runtime, Workers::Runtime.default
+      @declared = []
+    end
+
+    # A database one test filled would be the next one's starting state, and
+    # the server outlives them both. Only a test that published a Tenant
+    # declaring one reaches the server at all, so a run that never touches a
+    # database never starts it either.
+    def teardown
+      @declared.each { |namespace| Sqld.drop(namespace) }
     end
 
     def app = Workers::Host
@@ -51,6 +61,7 @@ module TestHelper
       FileUtils.mkdir_p(dir)
       File.write(File.join(dir, "app.json"), manifest)
       File.write(File.join(dir, "main.rb"), source)
+      @declared.concat(declared_by(name, manifest))
       dir
     end
 
@@ -61,12 +72,18 @@ module TestHelper
       RUBY
     end
 
-    # Somewhere for the Tenants' databases, pointed at for the block.
+    # The databases the Tenants under test reach, pointed at for the block.
     def storing
-      Dir.mktmpdir do |root|
-        Workers::Host.set :databases, Workers::Databases.new(root: root)
-        yield root
-      end
+      Workers::Host.set :databases, Workers::Databases.new(url: Sqld.url, admin_url: Sqld.admin_url)
+      yield
+    end
+
+    # The databases a Manifest declares, under the names the Host resolves
+    # them to. A Manifest the Host would refuse declares none.
+    def declared_by(name, manifest)
+      Workers::Manifest.parse(manifest).databases.values.map { |identifier| "#{name}-#{identifier}" }
+    rescue Workers::InvalidManifest
+      []
     end
   end
 end
