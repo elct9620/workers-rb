@@ -94,6 +94,22 @@ class FailureTest < TestHelper::Case
     assert_equal 200, last_response.status
   end
 
+  # The one failure class no Tenant can ask for: the Sandbox answers with
+  # something the wire cannot frame, so what comes back is unusable rather
+  # than wrong. Reached here by handing the guest a String larger than its
+  # mruby build holds — the bound `BodyLimit` keeps every caller on the other
+  # side of, which is why no request can arrive at this.
+  def test_a_sandbox_that_answered_nothing_readable_is_runtime_corruption
+    sandbox = Workers::Runtime.default.sandbox
+    sandbox.preload(code: "App = ->(env) { env }", name: "Probe")
+
+    error = assert_raises(Kobako::TrapError) { sandbox.run(:App, "a" * (1024 * 1024)) }
+    failure = Workers::Failure.for(error)
+
+    assert_equal "runtime_corruption", failure.name
+    assert_equal 503, failure.status
+  end
+
   # A shared directory the Host cannot read is not a directory where nothing
   # was published. Answering 404 would say the endpoint is gone, when what is
   # gone is the Host's reach.
