@@ -45,13 +45,12 @@ class DatabaseTest < TestHelper::Case
   # An operator looking for a Tenant's database has only the Manifest to go
   # on, so what the two names resolve to is a contract rather than a detail.
   def test_a_database_takes_its_name_from_the_tenant_and_the_identifier
-    storing do
-      serving("keeper", manifest: MAIN, source: probing('DB::Main.execute("create table t (n integer)")')) do
-        get "/keeper"
+    storing
+    serving("keeper", manifest: MAIN, source: probing('DB::Main.execute("create table t (n integer)")')) do
+      get "/keeper"
 
-        assert_equal 200, last_response.status
-        assert_equal [ { "n" => 0 } ], reaching("keeper-main", "select count(*) as n from t")
-      end
+      assert_equal 200, last_response.status
+      assert_equal [ { "n" => 0 } ], reaching("keeper-main", "select count(*) as n from t")
     end
   end
 
@@ -62,21 +61,20 @@ class DatabaseTest < TestHelper::Case
   end
 
   def test_a_tenant_reaches_no_database_another_tenant_declared
-    storing do
-      serving("owner", manifest: MAIN, source: probing(<<~RUBY)) do |root|
-        DB::Main.execute("create table if not exists secrets (word text)")
-        DB::Main.execute("insert into secrets values ('open sesame')")
-      RUBY
-        get "/owner"
-        assert_equal 200, last_response.status
+    storing
+    serving("owner", manifest: MAIN, source: probing(<<~RUBY)) do |root|
+      DB::Main.execute("create table if not exists secrets (word text)")
+      DB::Main.execute("insert into secrets values ('open sesame')")
+    RUBY
+      get "/owner"
+      assert_equal 200, last_response.status
 
-        # The neighbour declares a Binding of its own under the same constant,
-        # so the name resolves — to its own database, holding no such table.
-        publish(root, "neighbour", manifest: MAIN, source: probing('DB::Main.query("select * from secrets")'))
-        get "/neighbour"
+      # The neighbour declares a Binding of its own under the same constant,
+      # so the name resolves — to its own database, holding no such table.
+      publish(root, "neighbour", manifest: MAIN, source: probing('DB::Main.query("select * from secrets")'))
+      get "/neighbour"
 
-        assert_includes JSON.parse(last_response.body)["message"], "no such table: secrets"
-      end
+      assert_includes JSON.parse(last_response.body)["message"], "no such table: secrets"
     end
   end
 
@@ -104,21 +102,20 @@ class DatabaseTest < TestHelper::Case
   # what puts the writes in an order, so none of them answers a failure for
   # having arrived while another was being served.
   def test_concurrent_invocations_writing_one_database_all_complete
-    storing do
-      serving("busy", manifest: MAIN, source: probing(<<~RUBY)) do
-        DB::Main.execute("create table if not exists hits (n integer)")
-        DB::Main.execute("insert into hits values (1)")
-        DB::Main.query("select count(*) as n from hits")[0]["n"]
-      RUBY
-        get "/busy" # settle the table before the burst
+    storing
+    serving("busy", manifest: MAIN, source: probing(<<~RUBY)) do
+      DB::Main.execute("create table if not exists hits (n integer)")
+      DB::Main.execute("insert into hits values (1)")
+      DB::Main.query("select count(*) as n from hits")[0]["n"]
+    RUBY
+      get "/busy" # settle the table before the burst
 
-        answers = 12.times.map {
-          Thread.new { Rack::MockRequest.new(Workers::Host).get("/busy") }
-        }.map { |thread| JSON.parse(thread.value.body) }
+      answers = 12.times.map {
+        Thread.new { Rack::MockRequest.new(Workers::Host).get("/busy") }
+      }.map { |thread| JSON.parse(thread.value.body) }
 
-        assert_empty(answers.filter_map { |answer| answer["message"] })
-        assert_equal 13, answers.filter_map { |answer| answer["value"] }.max
-      end
+      assert_empty(answers.filter_map { |answer| answer["message"] })
+      assert_equal 13, answers.filter_map { |answer| answer["value"] }.max
     end
   end
 
@@ -179,8 +176,8 @@ class DatabaseTest < TestHelper::Case
                       Workers::Databases.new(url: "http://#{UNREACHABLE}", admin_url: "http://#{UNREACHABLE}")
   end
 
-  # A database reached the way nothing but the Host reaches it, so which one
-  # the Host wrote to is read rather than assumed.
+  # The database as something other than the Host finds it, so which one the
+  # Host wrote to is read rather than assumed.
   def reaching(namespace, sql)
     Workers::Hrana.new(url: Sqld.url, admin_url: Sqld.admin_url, namespace: namespace).query(sql, [])
   end
@@ -204,10 +201,9 @@ class DatabaseTest < TestHelper::Case
   end
 
   def answering(statements, manifest: MAIN)
-    storing do
-      serving("subject", manifest: manifest, source: probing(statements)) do
-        yield
-      end
+    storing
+    serving("subject", manifest: manifest, source: probing(statements)) do
+      yield
     end
   end
 

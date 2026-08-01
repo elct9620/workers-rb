@@ -72,10 +72,11 @@ module TestHelper
       RUBY
     end
 
-    # The databases the Tenants under test reach, pointed at for the block.
+    # Points the Host at the server the suite drives, which starts here if
+    # this is the first test in the run to ask for it. `teardown` is what
+    # takes the databases away again.
     def storing
       Workers::Host.set :databases, Workers::Databases.new(url: Sqld.url, admin_url: Sqld.admin_url)
-      yield
     end
 
     # The databases a Manifest declares, under the names the Host resolves

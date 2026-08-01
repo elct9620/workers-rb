@@ -78,32 +78,33 @@ module Workers
       # would otherwise hold a socket for every one it had ever answered.
       Net::HTTP.start(address.host, address.port,
                       open_timeout: TIMEOUT, read_timeout: TIMEOUT) { |http| http.request(request) }
-    rescue SystemCallError, IOError, Timeout::Error
-      unreachable
+    rescue SystemCallError, IOError, Timeout::Error => e
+      failed("cannot reach #{where}: #{e.message}")
     end
 
     # Reaching the database at all is the Host's side of the contract, so a
     # failure there is the operator's to see. What the statement itself did is
     # the Tenant's, and never reaches here.
     def answered(response)
-      unreachable unless response.is_a?(Net::HTTPSuccess)
+      failed("#{where} answered #{response.code}") unless response.is_a?(Net::HTTPSuccess)
 
-      results = JSON.parse(response.body).fetch("results")
-      statement = results.first
+      statement = JSON.parse(response.body).fetch("results").first.to_h
       raise DatabaseError, statement.dig("error", "message").to_s if statement.fetch("type") == "error"
 
       statement.fetch("response").fetch("result")
-    rescue JSON::ParserError
-      unreachable
+    rescue JSON::ParserError, KeyError
+      failed("#{where} answered nothing this Host could read")
     end
 
-    # The address goes where the operator reads and no further: a Tenant that
-    # rescues this learns that its database is unavailable and nothing about
-    # where the Host was looking for it.
-    def unreachable
-      @errors&.puts("cannot reach #{@url}/#{@namespace}")
+    # What went wrong goes where the operator reads and no further: a Tenant
+    # that rescues this learns that its database is unavailable and nothing
+    # about where the Host was looking for it or what it found there.
+    def failed(detail)
+      @errors&.puts(detail)
       raise DatabaseError, "the database is unavailable"
     end
+
+    def where = "#{@url}/#{@namespace}"
 
     def encode(param)
       case param
@@ -128,7 +129,7 @@ module Workers
       when "blob" then value.fetch("base64").unpack1("m")
       # A value the Host cannot name is one it would otherwise hand over as
       # nil, which reads as a column that held nothing.
-      else unreachable
+      else failed("#{where} answered a #{value["type"]}, which this Host cannot read")
       end
     end
   end
