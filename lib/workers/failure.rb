@@ -17,10 +17,10 @@ module Workers
   # left unrescued either ends the request as a binding failure.
   class DatabaseError < StandardError; end
 
-  # A database that answered by declining. It is reachable and the statement
-  # is sound; there is simply more being asked of it at once than it takes.
-  # A Tenant rescues it like any other, and the Host reads it as a reason to
-  # ask for less rather than as something broken.
+  # Nothing is broken and the statement is sound; there is simply more being
+  # asked at once than can be carried — whether the database said so, or this
+  # Host ran out of its own room to ask. A Tenant rescues it like any other,
+  # and the Host reads it as a reason to ask for less.
   class DatabaseBusy < DatabaseError; end
 
   # The category a failed invocation answers with. kobako's errors say what

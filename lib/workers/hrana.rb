@@ -108,7 +108,7 @@ module Workers
     def holding(address)
       pool(address).with { |http| yield http }
     rescue ConnectionPool::TimeoutError => e
-      failed("cannot reach #{where}: #{e.message}")
+      withheld(e.message)
     end
 
     def post(http, path, body)
@@ -179,6 +179,14 @@ module Workers
     # ask for less, so this is the operator's to read.
     def declined
       @errors&.puts("#{where} is taking no more statements at once")
+      raise DatabaseBusy, "the database is busy"
+    end
+
+    # The same shortage on this Host's own side of it: every connection is
+    # busy and the statement never left. An operator told the database could
+    # not be reached would go looking at the network for a limit set here.
+    def withheld(detail)
+      @errors&.puts("this Host is running no more statements at once for #{where}: #{detail}")
       raise DatabaseBusy, "the database is busy"
     end
 

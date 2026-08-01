@@ -116,6 +116,22 @@ class HranaTest < Minitest::Test
                     "the statement outlasted what the invocation is allowed"
   end
 
+  # The same shortage on this Host's side: the statement never left, so an
+  # operator told the database could not be reached would go looking at the
+  # network for a limit set here. No room at all is the case that does not
+  # race — a Host whose connections are merely busy releases one the moment
+  # the statement ahead gives up. The server is here only to own an address
+  # no other test has pooled; nothing ever reaches it.
+  def test_a_statement_this_host_has_no_room_for_is_not_a_database_it_could_not_reach
+    errors = StringIO.new
+    crowded = Workers::Hrana.new(url: "http://127.0.0.1:#{Unresponsive.silent}", admin_url: Sqld.admin_url,
+                                 namespace: "crowded", pool: 0, errors: errors)
+
+    assert_raises(Workers::DatabaseBusy) { crowded.query("select 1", []) }
+    refute_includes errors.string, "cannot reach", "a limit set on this Host read as an unreachable database"
+    assert_includes errors.string, "no more statements at once"
+  end
+
   def test_a_database_that_declines_is_not_one_the_host_could_not_reach
     errors = StringIO.new
     busy = Workers::Hrana.new(url: "http://127.0.0.1:#{Unresponsive.declining(429)}", admin_url: "http://127.0.0.1:1",
