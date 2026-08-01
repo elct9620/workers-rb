@@ -3,6 +3,7 @@
 require "connection_pool"
 require "json"
 require "net/http"
+require "stoplight"
 require "uri"
 
 module Workers
@@ -38,11 +39,12 @@ module Workers
     LOCK = Mutex.new
     private_constant :POOLS, :LOCK
 
-    def initialize(url:, admin_url:, namespace:, pool: 5, errors: nil)
+    def initialize(url:, admin_url:, namespace:, pool: 5, cool_off: 60, errors: nil)
       @url = URI(url)
       @admin_url = URI(admin_url)
       @namespace = namespace
       @pool = pool
+      @cool_off = cool_off
       @errors = errors
     end
 
@@ -96,10 +98,20 @@ module Workers
       # capacity. Whether the connection it is handed is still good is
       # Net::HTTP's to decide — it reconnects on a socket the server closed,
       # on one idle past its keep-alive, and on one left at EOF.
-      pool(address).with { |http| http.request(request) }
+      light.run { pool(address).with { |http| http.request(request) } }
+    rescue Stoplight::Error::RedLight
+      # Already known to be unreachable, and already said so. Waiting to find
+      # out again is what would cost this request and the database both.
+      raise DatabaseError, "the database is unavailable"
     rescue SystemCallError, IOError, Timeout::Error, ConnectionPool::TimeoutError => e
       failed("cannot reach #{where}: #{e.message}")
     end
+
+    # Per database, so one Tenant's outage is not another's. What a statement
+    # the database refused did is decided after this and outside it, so
+    # neither a Tenant's own mistake nor a database declining more at once
+    # counts towards giving up on it.
+    def light = Stoplight("database:#{@namespace}", cool_off_time: @cool_off)
 
     # Checking out blocks while every connection is busy, which is what keeps
     # one Host from asking more of the database at once than it said it would.

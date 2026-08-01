@@ -103,6 +103,28 @@ class HranaTest < Minitest::Test
     refute_includes errors.string, "cannot reach"
   end
 
+  # B-34, both halves: a database that stopped answering stops being waited
+  # on, and is reached again once it answers, with nothing restarted.
+  def test_a_database_that_stopped_answering_is_left_alone_and_taken_back
+    silent = Unresponsive.silent
+    stranded = Workers::Hrana.new(url: "http://127.0.0.1:#{silent}", admin_url: Sqld.admin_url,
+                                  namespace: "given-up-on-#{Process.pid}", cool_off: 1)
+
+    3.times { assert_raises(Workers::DatabaseError) { stranded.query("select 1", []) } }
+
+    at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    assert_raises(Workers::DatabaseError) { stranded.query("select 1", []) }
+    assert_operator Process.clock_gettime(Process::CLOCK_MONOTONIC) - at, :<, 0.5,
+                    "the Host waited on a database it had already given up on"
+
+    # Answering again is the only thing that changes; nothing is restarted.
+    answering = Workers::Hrana.new(url: Sqld.url, admin_url: Sqld.admin_url,
+                                   namespace: "given-up-on-#{Process.pid}", cool_off: 1)
+    sleep 1.1
+
+    assert_equal [], answering.query("select 1 where 0", [])
+  end
+
   private
 
   def database

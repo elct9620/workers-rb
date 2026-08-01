@@ -14,6 +14,10 @@ gem "sinatra", "~> 4.2"
 # runs out of local ports long before the server runs out of capacity.
 gem "connection_pool", "~> 3.0"
 
+# A database that stopped answering is one the Host stops reaching for until
+# it answers again, per SPEC B-34.
+gem "stoplight", "~> 5.8"
+
 group :development do
   gem "minitest", "~> 6.0"
   gem "rack-test", "~> 2.2"
