@@ -77,7 +77,7 @@ These roles constitute the system. Later layers use these names exclusively.
 - Resolve a request to exactly one Tenant by either path form or Host header form
 - Hold, per Tenant, a Sandbox loaded with the Runtime Kit and that Tenant's source, and rebuild it after its files change
 - Supply `Env` and each `DB` Binding declared in the Manifest for the duration of one invocation
-- Create a declared Binding's database file when it does not exist, and open it for the invocation
+- Create a declared Binding's database when it does not exist
 - Supply the `Time` and `Random` Bindings, which read the Host's clock and entropy
 - Compose the request environment from the request and pass it as the Worker's only argument, then hand the returned triplet to the HTTP layer
 - Narrow every Binding's guest-reachable method surface to an explicit allow list
