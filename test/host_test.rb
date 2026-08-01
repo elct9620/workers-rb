@@ -63,6 +63,22 @@ class HostTest < TestHelper::Case
     assert_equal "Kobako::ServiceError", body["refused_env"]
   end
 
+  # A Binding is refused by the Host; the environment, the filesystem and the
+  # network are not refused by anyone — the guest binary carries no name for
+  # them, so tenant code cannot spell a way out. Nothing in the Host enforces
+  # that, which is why it is asserted here: a build that carried `File` would
+  # pass every other test in this suite.
+  def test_the_sandbox_reaches_no_environment_no_filesystem_and_no_network
+    get "/closed"
+    reached = JSON.parse(last_response.body)
+
+    %w[environment filesystem directory network].each do |way_out|
+      assert_match(/\ANameError/, reached[way_out], "#{way_out} named something the guest could reach")
+    end
+    assert_match(/\ANoMethodError/, reached["shell"], "the guest reached a shell")
+    refute_includes last_response.body, Dir.pwd, "a refusal named where the Host runs"
+  end
+
   def test_the_request_environment_carries_every_field_it_declares
     post "/surface/items?q=1", "payload",
          { "CONTENT_TYPE" => "text/plain", "HTTP_X_PROBE" => "seen" }
