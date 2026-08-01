@@ -10,6 +10,10 @@ module Workers
   # A Worker's return value that is not a Rack response triplet.
   class InvalidResponse < StandardError; end
 
+  # A request body larger than the Host will carry, found on the read rather
+  # than on the length the request declared. No Worker runs on it.
+  class BodyTooLarge < StandardError; end
+
   # A Binding that did not answer with what was asked of it. A statement the
   # database refused carries what it said; a database the Host could not reach
   # carries nothing but that, because where the Host looked is the operator's

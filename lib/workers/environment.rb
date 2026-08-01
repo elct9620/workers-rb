@@ -30,12 +30,18 @@ module Workers
       }
     end
 
+    # `BodyLimit` refuses on the length a request declares, and a request that
+    # declared none reaches here anyway. One byte past the limit is what says
+    # the body ran past it, so the Host holds no more than it will carry.
     def self.body(rack_request)
       input = rack_request.body
       return "" if input.nil?
 
       input.rewind if input.respond_to?(:rewind)
-      input.read.to_s
+      read = input.read(BodyLimit::BYTES + 1).to_s
+      raise BodyTooLarge if read.bytesize > BodyLimit::BYTES
+
+      read
     end
     private_class_method :body
 

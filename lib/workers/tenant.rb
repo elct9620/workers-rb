@@ -16,13 +16,16 @@ module Workers
     # Sandbox is built, so nothing this request touched survives into the next
     # one.
     def call(rack_request, node:, databases:)
+      # Composed first, because a request the Host will not carry is one no
+      # Sandbox is built or woken for.
+      environment = Environment.for(rack_request)
       sandbox = current
       errors = rack_request.env["rack.errors"]
       supplied = @manifest.databases.to_h { |constant, identifier|
         [ constant, databases.for(@name, identifier, errors: errors) ]
       }
 
-      execution = sandbox.run(@manifest.entrypoint.to_sym, Environment.for(rack_request)) do |context|
+      execution = sandbox.run(@manifest.entrypoint.to_sym, environment) do |context|
         context.bind("Env", Guest::Env.new(node: node, tenant: @name))
         context.bind("Time", Guest::Clock.new)
         context.bind("Random", Guest::Entropy.new)

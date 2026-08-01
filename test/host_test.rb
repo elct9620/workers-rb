@@ -155,6 +155,52 @@ class HostTest < TestHelper::Case
     assert_equal "shipped=yes", body["body"]
   end
 
+  # The invocation's memory limit bounds what the guest holds. The caller is
+  # not the Tenant that limit was drawn around, so what the Host reads before
+  # there is a guest to hand it to is bounded here.
+  def test_a_body_at_the_limit_is_carried_and_one_past_it_is_not
+    limit = Workers::BodyLimit::BYTES
+
+    post "/surface", "a" * limit, { "CONTENT_TYPE" => "text/plain" }
+
+    assert_equal 200, last_response.status
+    assert_equal limit, JSON.parse(last_response.body)["body"].bytesize
+
+    post "/surface", "a" * (limit + 1), { "CONTENT_TYPE" => "text/plain" }
+
+    assert_equal 413, last_response.status
+  end
+
+  # A body the Host will not carry ends the request where its length is read,
+  # so the Tenant it was addressed to is never dispatched into.
+  def test_a_body_past_the_limit_reaches_no_worker
+    post "/talkative/here", "a" * (Workers::BodyLimit::BYTES + 1), { "CONTENT_TYPE" => "text/plain" }
+
+    assert_equal 413, last_response.status
+    refute_includes recorded, "worked on"
+  end
+
+  # A caller names the content type, and a form body is the one the HTTP layer
+  # reads on its own account before the Host is asked anything. Refusing on the
+  # declared length is what keeps that read from happening at all.
+  def test_a_form_body_past_the_limit_is_refused_before_anything_parses_it
+    post "/surface", "field=#{"a" * Workers::BodyLimit::BYTES}",
+         { "CONTENT_TYPE" => "application/x-www-form-urlencoded" }
+
+    assert_equal 413, last_response.status
+  end
+
+  # The declared length is what the Host acts on, and a request that declares
+  # none still reaches the Worker through one read. That read is bounded too,
+  # so no single control is the whole of it.
+  def test_a_body_that_declared_no_length_is_still_read_no_further_than_the_limit
+    oversize = "a" * (Workers::BodyLimit::BYTES + 1)
+    request = Rack::Request.new(Rack::MockRequest.env_for("/", method: "POST", input: oversize))
+    request.env.delete("CONTENT_LENGTH")
+
+    assert_raises(Workers::BodyTooLarge) { Workers::Environment.for(request) }
+  end
+
   def test_a_failing_tenant_answers_without_disclosing_the_host
     get "/broken"
 

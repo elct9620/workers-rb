@@ -26,6 +26,10 @@ module Workers
     set :raise_errors, false
     set :show_exceptions, false
 
+    # Ahead of the routing, because a body the Host will not carry is refused
+    # before it is read rather than after a Tenant has been found for it.
+    use BodyLimit
+
     # Tenants are resolved from the request, not from a route table, so every
     # method lands on the same handler.
     %i[get post put patch delete options].each do |verb|
@@ -47,6 +51,10 @@ module Workers
       # only one who can fix it, so the reason goes to them and not outward.
       env["rack.errors"].puts(e.message)
       halt 404
+    rescue BodyTooLarge
+      # Nothing declared how long this body was, so the read is what found it.
+      # The Worker never saw it, and the caller learns only that.
+      halt 413
     rescue SourceUnreadable => e
       # The Tenant published nothing wrong; this Host cannot reach what it
       # published. Only the operator can act on that, and only if told.

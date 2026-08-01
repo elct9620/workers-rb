@@ -113,7 +113,7 @@ These roles constitute the system. Later layers use these names exclusively.
 #### Control — what the Host controls / depends on
 
 - **Controls:** route resolution, Sandbox lifecycle, the content and method surface of each Binding, the creation of each Binding's database, and the mapping from failure to HTTP status
-- **Depends on:** kobako's isolation and error classification, the Sandbox's mruby build providing JSON generation and ASCII Regexp, the database server holding the Tenants' databases being reachable for reading and writing from every Node, the readability of the shared directory, the hostname the operating system reports for this Node, and the Gateway's external connectivity
+- **Depends on:** kobako's isolation and error classification, the Sandbox's mruby build providing JSON generation, ASCII Regexp, and a String large enough to hold a request body, the database server holding the Tenants' databases being reachable for reading and writing from every Node, the readability of the shared directory, the hostname the operating system reports for this Node, and the Gateway's external connectivity
 
 ### Feature List
 
@@ -414,7 +414,7 @@ One set of limits applies to every Tenant; a Manifest does not alter them.
 |-------|-------|---------------|
 | Wall clock per invocation | 5 seconds | E-08 |
 | Memory per invocation | 16 MiB | E-09 |
-| Request body per invocation | 1 MiB | E-13 |
+| Request body per invocation | 512 KiB | E-13 |
 | Captured output per invocation | 64 KiB each for the standard output and error streams | Output is clipped; the request still completes |
 
 #### Host limits

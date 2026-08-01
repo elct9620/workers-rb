@@ -7,6 +7,14 @@
 # leaves choosing the Tenant to the Host, which is the only side that knows
 # what was published.
 :80 {
+	# The same bound each Host holds, so a body no Host would carry is turned
+	# away at the one address rather than on whichever Node it landed on. The
+	# Host still holds its own — a Node reached without this in front of it is
+	# a Node that answers requests.
+	request_body {
+		max_size 512KiB
+	}
+
 	reverse_proxy node-a:9292 node-b:9292 node-c:9292 {
 		# Consecutive requests land on different Nodes, which is what makes
 		# `Env.node` worth reading at all. Caddy's default is random, which
