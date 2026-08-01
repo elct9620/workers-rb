@@ -107,6 +107,24 @@ class HostTest < TestHelper::Case
     assert_equal "Kobako::ServiceError", body["refused_env"]
   end
 
+  # A Binding reaches tenant code as a constant, so a Tenant is free to put
+  # its own value there. What it gives up by doing so is the Host object that
+  # name held — and nothing else: the Binding is supplied per invocation into
+  # a Sandbox this Tenant alone has.
+  def test_a_tenant_defining_a_binding_name_reaches_its_own_definition
+    get "/eclipse"
+
+    assert_equal 200, last_response.status
+    assert_equal "the tenant's own", last_response.body
+  end
+
+  def test_a_tenant_that_took_a_binding_name_costs_its_neighbours_nothing
+    get "/eclipse"
+    get "/env"
+
+    assert_equal "env", JSON.parse(last_response.body)["tenant"]
+  end
+
   # A Binding is refused by the Host; the environment, the filesystem and the
   # network are not refused by anyone — the guest binary carries no name for
   # them, so tenant code cannot spell a way out. Nothing in the Host enforces
