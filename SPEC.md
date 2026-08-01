@@ -213,7 +213,7 @@ These roles constitute the system. Later layers use these names exclusively.
 | B-23 | A statement a Tenant executes against a Binding fails in the database | The failure reaches tenant code as an exception it may rescue |
 | B-24 | A Binding constant the Manifest does not declare | The constant does not exist in the Sandbox and referencing it raises `NameError`, which tenant code may rescue and which stays distinguishable from a declared Binding that is not yet supplied |
 | B-25 | A Tenant's Binding constant | Resolves only to a database that Tenant declared |
-| B-40 | A statement outlasts the statement limit | It fails as an exception the Tenant may rescue, rather than running the invocation's own clock out |
+| B-40 | The Host waits on a Binding's database longer than a wait is given | The wait ends there and the statement fails as an exception the Tenant may rescue |
 | B-41 | The database answers a statement by declining to take more at once | The refusal reaches tenant code as an exception it may rescue, and the Host records that it is asking the database for more than it takes — not that it could not reach it |
 
 ### F-06 — Runtime Kit
@@ -414,12 +414,14 @@ One set of limits applies to every Tenant; a Manifest does not alter them.
 
 #### Host limits
 
-What one Host holds, how long it waits, and how many times it tries. The statement limit stays under the wall clock per invocation by enough for a Worker to answer the failure.
+What one Host holds, how long it waits, and how many times it tries.
+
+The wall clock is given to one wait rather than to the statement making it: waiting for a connection to come free, for one to open, and for an answer to arrive each get it in turn. One wait leaves the Worker the rest of its invocation to answer the failure. Nothing bounds their sum, so a statement that waits its way past the invocation's own clock ends per E-08 rather than as a failure the Tenant reads.
 
 | Limit | Value | When it runs out |
 |-------|-------|------------------|
 | Sandboxes held per Host | 64 Tenants, least recently reached first out | B-39 |
-| Wall clock per statement | 2 seconds | B-40 |
+| Wall clock per wait on a database | 2 seconds | B-40 |
 | Statements in flight per Host | 5 | B-40 |
 | Attempts given a database that is not answering | 3 | B-34 |
 | Quiet given a database that stopped answering | 60 seconds | B-34 |

@@ -20,10 +20,10 @@ module Workers
     PIPELINE = "/v2/pipeline"
     private_constant :PIPELINE
 
-    # A statement has to give up before the invocation waiting on it does.
-    # Given the same bound, the invocation's own clock runs out first and the
-    # Worker is cut short instead of being handed a failure it could rescue —
-    # so this stays under `Runtime`'s limit by enough for a Worker to answer.
+    # What one wait on the database is given — for a connection to come free,
+    # for one to open, for an answer to arrive. Short enough that a statement
+    # waiting once leaves the Worker the rest of its invocation to answer the
+    # failure, rather than being cut short with nothing to rescue.
     TIMEOUT = 2
     private_constant :TIMEOUT
 
