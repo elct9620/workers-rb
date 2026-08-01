@@ -186,7 +186,7 @@ These roles constitute the system. Later layers use these names exclusively.
 
 | ID | State + Operation | Result |
 |----|-------------------|--------|
-| B-09 | A Tenant is routed to for the first time | The Host creates a Sandbox, loads the Runtime Kit and that Tenant's `*.rb`, declares `Env`, `Time`, `Random`, and each Manifest Binding as pending, then dispatches the entrypoint |
+| B-09 | A Tenant is routed to for the first time | The Host creates a Sandbox, loads the Runtime Kit and that Tenant's `*.rb`, declares `Env`, `Time`, `Random`, and each Manifest Binding, then dispatches the entrypoint |
 | B-10 | The Tenant has a Sandbox and its files are unchanged | That Sandbox serves the dispatch; source is not reloaded |
 | B-11 | The Tenant's files have changed | The Tenant's Sandbox is discarded and rebuilt per B-09, then dispatched |
 | B-12 | Concurrent requests to one Tenant | They share that Tenant's Sandbox; each invocation holds its own Bindings and output captures |
@@ -442,7 +442,7 @@ A database is named `<tenant>-<database identifier>`. A database identifier carr
 | Any request data tenant code reads | Compose it into a value the Host builds and hands over, rather than a Handle to a Host object; a field the Host left out is unreachable rather than merely refused |
 | Any Host object supplied into a Sandbox | Narrow the methods tenant code may call to an allow list; methods outside it are invisible by default |
 | Any method name on a guest-reachable surface | Keep it clear of Ruby's ambient reflection surface — `method`, `send`, `class` and their kin are refused before any allow list is read |
-| Any Binding that varies per request | Declare it pending when the Sandbox is built and supply it per invocation; an unsupplied call fails rather than falling back to a shared object |
+| Any Binding that varies per request | Declare it when the Sandbox is built and supply it per invocation, so what one request reached is not what the next one finds |
 | Any change to a Tenant's files | Discard and rebuild that Tenant's Sandbox rather than updating it in part |
 | Any routing ambiguity | Treat it as not routable rather than guessing the target Tenant |
 | Any disagreement between the shared directory and cached Host state | The shared directory governs |
