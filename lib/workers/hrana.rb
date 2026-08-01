@@ -38,6 +38,16 @@ module Workers
     TOO_MANY = "429"
     private_constant :TOO_MANY
 
+    # How many times this Host reaches a database that is not answering before
+    # it stops reaching. One blip is not an outage, and each attempt costs a
+    # statement the whole wall clock — so few enough that a Tenant is not
+    # spending its invocations finding out, and more than one.
+    #
+    # Counted in a row rather than as a share of a window: a statement that
+    # answers is what says the database is back, and it clears this on its own.
+    ATTEMPTS = 3
+    private_constant :ATTEMPTS
+
     # One pool per address, for the life of the Host. A Binding lasts one
     # invocation, so anything held per Binding would be opened and dropped
     # once per statement — which is what this exists to stop.
@@ -137,7 +147,14 @@ module Workers
     # the database refused did is decided after this and outside it, so
     # neither a Tenant's own mistake nor a database declining more at once
     # counts towards giving up on it.
-    def light = Stoplight("database:#{@namespace}", cool_off_time: @cool_off)
+    #
+    # Both bounds are stated: what `3` counts is the strategy's to decide, so
+    # a library that changed its default would otherwise change this Host's
+    # behaviour without changing this line.
+    def light
+      Stoplight("database:#{@namespace}", traffic_control: :consecutive_errors,
+                                          threshold: ATTEMPTS, cool_off_time: @cool_off)
+    end
 
     # Checking out blocks while every connection is busy, which is what keeps
     # one Host from asking more of the database at once than it said it would.

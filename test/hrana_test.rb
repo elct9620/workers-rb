@@ -148,11 +148,16 @@ class HranaTest < Minitest::Test
     stranded = Workers::Hrana.new(url: "http://127.0.0.1:#{silent}", admin_url: Sqld.admin_url,
                                   namespace: "given-up-on-#{Process.pid}", cool_off: 1)
 
-    3.times { assert_raises(Workers::DatabaseError) { stranded.query("select 1", []) } }
+    # How many attempts the Host makes before it stops reaching, spelled out
+    # here rather than read off the Host: a test that took the number from the
+    # thing it is testing would pass whatever that number became. Both sides
+    # of it are held — giving up sooner takes a Tenant's database away for a
+    # blip, and giving up later spends its invocations finding out.
+    2.times { assert_raises(Workers::DatabaseError) { stranded.query("select 1", []) } }
 
-    at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-    assert_raises(Workers::DatabaseError) { stranded.query("select 1", []) }
-    assert_operator Process.clock_gettime(Process::CLOCK_MONOTONIC) - at, :<, 0.5,
+    assert_operator waiting_for(stranded), :>, 0.5,
+                    "the Host gave up before it had reached as many times as it says"
+    assert_operator waiting_for(stranded), :<, 0.5,
                     "the Host waited on a database it had already given up on"
 
     # Answering again is the only thing that changes; nothing is restarted.
@@ -164,6 +169,14 @@ class HranaTest < Minitest::Test
   end
 
   private
+
+  # How long a statement that was going to fail took to say so. A Host still
+  # reaching waits for the database; one that has given up answers at once.
+  def waiting_for(client)
+    at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    assert_raises(Workers::DatabaseError) { client.query("select 1", []) }
+    Process.clock_gettime(Process::CLOCK_MONOTONIC) - at
+  end
 
   def database
     @database ||= Workers::Hrana.new(url: Sqld.url, admin_url: Sqld.admin_url, namespace: @namespace)
