@@ -10,9 +10,10 @@ placing files in a shared directory, and the Host serves them from inside
 > API, and no quota, billing, or cross-tenant fairness — whoever can write to
 > the shared directory is a tenant. Do not run it in production.
 
-[SPEC.md](SPEC.md) is the target state. What runs today is a three-node local
-cluster: all three routing forms, per-tenant sandboxes, the Runtime Kit, and
-the `Env`, `DB`, `Time`, and `Random` Bindings. The nodes name one database
+[SPEC.md](SPEC.md) is the target state. What runs today is a multi-node
+cluster — locally under `docker compose`, or on Kubernetes through
+`charts/workers`: all three routing forms, per-tenant sandboxes, the Runtime
+Kit, and the `Env`, `DB`, `Time`, and `Random` Bindings. The nodes name one database
 server between them, so every node reads and writes every tenant's database
 and a write is there for the next request wherever it lands.
 
@@ -99,6 +100,33 @@ SQLD_CHECKPOINT_INTERVAL_S ≤ the shortest quiet gap your traffic has
 Measured here: `b` ≈ 2 KB, and a log that reached 35 MB under continuous
 writes was back to zero within 30 seconds of the writes stopping.
 
+## Deploying to a cluster
+
+`charts/workers` asks Kubernetes for the same shape: several Hosts reading one
+shared directory, one database server they all name, and one internal address.
+
+```sh
+helm install workers charts/workers \
+  --set sharedDirectory.existingClaim=tenants
+```
+
+The shared directory has no default. Every Host reads the same one, and a
+volume only one of them can mount produces a cluster that disagrees about
+which Tenants exist without any Host reporting an error — so the install stops
+until a ReadWriteMany claim is named, or a class that can provision one.
+
+The chart installs no Gateway. It creates the internal Service and prints the
+address to point a tunnel, reverse proxy, or load balancer at. Which Node
+answers a request follows that Gateway's connection handling — one that keeps
+a connection open reaches one Host for its lifetime. `Env.node` reports the
+Pod's name, which changes when the Hosts are rolled.
+
+The database server is one Pod holding one volume, so `databases.storageClass`
+decides what a lost machine costs: a class whose volume follows the Pod has the
+server rescheduled, one bound to a machine has it waited for. NFS serves the
+shared directory well and a database badly — SQLite's locking is the
+difference.
+
 ## Testing
 
 ```sh
@@ -162,9 +190,10 @@ move them.
 | Memory per invocation | 16 MiB | 503, marked as a memory limit |
 | Request body | 512 KiB | 413, before any Worker runs |
 
-The body limit is held at the address in front of the cluster and again at
-each Host, so a node reached directly is still a node that refuses an
-oversized body — and refuses it before reading it.
+Each Host holds the body limit itself, so a node reached directly is still a
+node that refuses an oversized body — and refuses it before reading it.
+Whatever stands in front of the cluster may refuse it earlier: the local
+cluster's proxy does, and a Gateway you supply is yours to say.
 
 A failure is one request's outcome. Tenant code that raises, loops forever, or
 returns something that is not a Rack triplet ends that request 5xx carrying
