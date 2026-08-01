@@ -41,11 +41,20 @@ services:
     volumes:
       - databases:/var/lib/sqld
     healthcheck:
-      # The image carries no HTTP client, and a listening port is not yet an
-      # answering one — which is the difference a Node arriving first would
-      # otherwise find. Bash reaches the admin API on its own.
+      # Asked on the port that serves statements rather than the one that
+      # manages databases, so what it answers for is the path a Tenant uses.
+      # The image carries no HTTP client; bash reaches it on its own.
+      #
+      # This says whether the server is serving, and nothing about any one
+      # database: a Tenant's own can stop answering while this stays green,
+      # which is why the Host gives up on that one itself (SPEC B-34).
+      #
+      # Compose only records the answer — it restarts nothing, whatever
+      # `restart:` says. Acting on it belongs to whatever runs the workload;
+      # under Kubernetes this is the liveness probe and the restart is the
+      # platform's.
       test: [ "CMD", "bash", "-c",
-              'exec 3<>/dev/tcp/127.0.0.1/8081; printf "GET /v1/namespaces HTTP/1.0\r\n\r\n" >&3; head -1 <&3 | grep -q 200' ]
+              'exec 3<>/dev/tcp/127.0.0.1/8080; printf "GET /health HTTP/1.0\r\n\r\n" >&3; head -1 <&3 | grep -q 200' ]
       interval: 5s
       timeout: 3s
       start_period: 15s
