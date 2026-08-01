@@ -13,7 +13,7 @@ README's opening states what runs today.
 | `lib/workers/registry.rb` | What constitutes a Tenant under the shared directory, and how many the Host keeps |
 | `lib/workers/tenant.rb` | When a Sandbox is built, reused, and discarded |
 | `lib/workers/guest.rb` | Every Host object tenant code can reach, and the methods it may call on each |
-| `lib/workers/hrana.rb` | How a statement reaches the database server, and which failures are the operator's rather than the Tenant's |
+| `lib/workers/hrana.rb` | How a statement reaches the database server, which failures are the operator's rather than the Tenant's, and when the Host stops reaching at all |
 | `lib/workers/environment.rb` | Which request fields cross into the guest |
 | `lib/workers/manifest.rb` | What `app.json` may say, and what makes a Tenant unroutable |
 | `lib/workers/runtime_kit.rb` | The mruby source every Sandbox carries ahead of tenant files |
@@ -38,21 +38,16 @@ a method left off the list is invisible rather than refused. The request is no
 Binding: the Host composes it into a Hash, leaving a field it withheld with no
 name in the guest at all.
 
-The guest binary is a kobako release asset rather than part of the gem.
-`rake wasm:fetch` pins it to the resolved gem version, so the host side and
-the guest side cannot drift.
+The guest binary and the database server are release assets rather than gems,
+fetched by `rake wasm:fetch` and `rake sqld:fetch`. Both are pinned: the guest
+to the resolved kobako version so the two sides cannot drift, the server to
+what `test/sqld.rb` expects.
 
-The database server is a release asset too. `rake sqld:fetch` pins it and
-clears the versions it supersedes, because `test/sqld.rb` finds it by looking
-in `vendor/` rather than by version. That module starts one server for the
-whole run and ends it three ways — a SIGTERM trap, `at_exit`, and the
-server's own idle timeout for a runner killed outright, which runs neither.
-
-Every test under `test/` drives the real Host through `TestHelper::Case`, which
-resets its class-level configuration first and drops whatever databases the
-test's Manifests declared afterwards. Rack::Test settles its session on a
-test's first request, so a shared directory chosen inside `app` is the only one
-that test ever reads — `serving` points the Host instead.
+Every test under `test/` drives the real Host and a real database server
+through `TestHelper::Case`, which resets class-level configuration first and
+takes the test's databases away afterwards. Rack::Test settles its session on
+a test's first request, so a shared directory chosen inside `app` is the only
+one that test ever reads — `serving` points the Host instead.
 
 `e2e/` loads no Host. It speaks HTTP to a cluster `docker compose` is already
 running, and asserts only what no single process could show. `rake` does not

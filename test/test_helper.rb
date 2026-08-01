@@ -24,6 +24,9 @@ module TestHelper
       Workers::Host.set :node, Workers::Node.current
       Workers::Host.set :databases, Workers::Databases.current
       Workers::Host.set :runtime, Workers::Runtime.default
+      # A database the Host gave up on stays given up on for as long as the
+      # process lives, which is right for a Host and wrong for the next test.
+      Stoplight.__stoplight__reset!
       @declared = []
     end
 

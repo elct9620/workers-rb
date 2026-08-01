@@ -10,9 +10,10 @@ module Workers
   # One Tenant's database, as the Host reaches it over the network.
   #
   # A statement travels as its own request and closes the stream it opened, so
-  # an invocation leaves nothing on the server for the next one to find. Which
-  # database a request means travels in the Host header, where the server
-  # reads it, so the Host names a database rather than routing to one.
+  # an invocation leaves no state on the server for the next one to find — the
+  # connection it travelled down is another matter, and is kept. Which database
+  # a request means travels in the Host header, where the server reads it, so
+  # the Host names a database rather than routing to one.
   class Hrana
     # The endpoint both this server and Turso's own speak, so what the Host
     # is written against outlives either of them.
@@ -39,7 +40,7 @@ module Workers
     LOCK = Mutex.new
     private_constant :POOLS, :LOCK
 
-    def initialize(url:, admin_url:, namespace:, pool: 5, cool_off: 60, errors: nil)
+    def initialize(url:, admin_url:, namespace:, pool: DEFAULT_DB_POOL, cool_off: 60, errors: nil)
       @url = URI(url)
       @admin_url = URI(admin_url)
       @namespace = namespace
