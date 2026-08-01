@@ -8,17 +8,43 @@ x-node: &node
     # A Tenant answers at `<tenant>.workers.test` as well as at `/<tenant>`,
     # so both routing forms can be shown without owning a real domain.
     WORKERS_BASE_DOMAIN: workers.test
+    # Every Node reads and writes every Tenant's database, which one server
+    # for all three satisfies without anything between them: a write from any
+    # of them is there for the next request wherever it lands.
+    WORKERS_DB_URL: http://databases:8080
+    WORKERS_DB_ADMIN_URL: http://databases:8081
   volumes:
     # Tenants are published by placing files, so the directory is mounted
     # rather than baked in: an edit here reaches the next request on every
     # Node. `rake dev:tenant` writes a sample one.
     - ./app:/app:ro
-    # Every Node reads and writes every Tenant's database, which one volume
-    # for all three satisfies without anything between them: a write from any
-    # of them is there for the next request wherever it lands.
-    - databases:/data
+  depends_on:
+    databases:
+      condition: service_healthy
 
 services:
+  # Every Tenant's databases, held where all three Nodes reach them. A Node
+  # names the database it means in the Host header, which is where this reads
+  # it, so one server holds them all without a name per database to resolve.
+  databases:
+    image: ghcr.io/tursodatabase/libsql-server:v0.24.32
+    command: [ "/bin/sqld", "--enable-namespaces", "--disable-default-namespace" ]
+    environment:
+      SQLD_DB_PATH: /var/lib/sqld
+      SQLD_ADMIN_LISTEN_ADDR: 0.0.0.0:8081
+    volumes:
+      - databases:/var/lib/sqld
+    healthcheck:
+      # The image carries no HTTP client, and a listening port is not yet an
+      # answering one — which is the difference a Node arriving first would
+      # otherwise find. Bash reaches the admin API on its own.
+      test: [ "CMD", "bash", "-c",
+              'exec 3<>/dev/tcp/127.0.0.1/8081; printf "GET /v1/namespaces HTTP/1.0\r\n\r\n" >&3; head -1 <&3 | grep -q 200' ]
+      interval: 5s
+      timeout: 3s
+      start_period: 15s
+      retries: 5
+
   proxy:
     image: caddy:2-alpine
     ports:

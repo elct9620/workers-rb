@@ -25,20 +25,22 @@ namespace :wasm do
 end
 
 # The suite drives a real database server rather than a stand-in, so what the
-# DB Binding is tested against is what the cluster runs. It ships as a release
-# asset, and the suite names the version it expects, so fetching and driving
-# cannot disagree about which one that is.
-require_relative "test/sqld"
-
+# DB Binding is tested against is what the cluster runs. Like the guest binary
+# it ships as a release asset and is pinned here, so the version the suite
+# proves the Host against is one the operator can point at.
+SQLD_VERSION = "0.24.32"
 SQLD_TARGET = [
   RbConfig::CONFIG["host_cpu"] == "x86_64" ? "x86_64" : "aarch64",
   RbConfig::CONFIG["host_os"].include?("darwin") ? "apple-darwin" : "unknown-linux-gnu"
 ].join("-")
-SQLD_BINARY = "vendor/sqld-#{Sqld::VERSION}"
-SQLD_RELEASE = "https://github.com/tursodatabase/libsql/releases/download/libsql-server-v#{Sqld::VERSION}"
+SQLD_BINARY = "vendor/sqld-#{SQLD_VERSION}"
+SQLD_RELEASE = "https://github.com/tursodatabase/libsql/releases/download/libsql-server-v#{SQLD_VERSION}"
 
 file SQLD_BINARY do |task|
   mkdir_p File.dirname(task.name)
+  # The suite finds the server by looking rather than by version, so one left
+  # behind by an upgrade would be a second answer to which one it drives.
+  rm_f FileList["vendor/sqld-*"].exclude(task.name)
   Dir.mktmpdir do |staging|
     archive = File.join(staging, "sqld.tar.xz")
     URI.parse("#{SQLD_RELEASE}/libsql-server-#{SQLD_TARGET}.tar.xz")
@@ -83,10 +85,6 @@ namespace :dev do
     mkdir_p dir
     File.write(File.join(dir, "app.json"), SAMPLE_MANIFEST)
     File.write(File.join(dir, "main.rb"), SAMPLE_TENANT)
-
-    # Where the databases live is the operator's to provide; outside a
-    # container it is an ordinary directory the Host writes them into.
-    mkdir_p ENV.fetch("WORKERS_DB_DIR", "db")
   end
 end
 

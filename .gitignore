@@ -57,4 +57,3 @@ build-iPhoneSimulator/
 # Tenant code the Host serves. It belongs to whoever publishes it, not to
 # this repository.
 /app/
-/db/

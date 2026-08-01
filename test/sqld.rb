@@ -12,11 +12,6 @@ require "tmpdir"
 # proved against the server the cluster runs rather than a stand-in that
 # could drift from it.
 module Sqld
-  # The suite is what the server exists for, so the suite is where the version
-  # it drives is named. `rake sqld:fetch` reads it from here, which is what
-  # keeps the binary in `vendor/` and the one these tests expect the same one.
-  VERSION = "0.24.32"
-
   # A runner killed outright ends the server through neither `at_exit` nor
   # the trap. This is what still ends it, and it bounds how long a server
   # nobody owns can hold a port. It has to outlast the quietest stretch of a
@@ -63,11 +58,15 @@ module Sqld
       { url: "http://127.0.0.1:#{http}", admin_url: "http://127.0.0.1:#{admin}" }
     end
 
+    # Which version is `rake sqld:fetch`'s to decide, and it leaves exactly
+    # one behind, so the suite drives whichever one that was rather than
+    # holding a second opinion about it.
     def executable
-      path = File.expand_path("../vendor/sqld-#{VERSION}", __dir__)
-      raise "no database server at #{path} — `rake sqld:fetch` first" unless File.executable?(path)
+      found = Dir.glob(File.expand_path("../vendor/sqld-*", __dir__))
+      raise "no database server in vendor/ — `rake sqld:fetch` first" if found.empty?
+      raise "more than one database server in vendor/ — `rake sqld:fetch` again" unless found.one?
 
-      path
+      found.first
     end
 
     # Asked of the operating system rather than chosen, so a suite running

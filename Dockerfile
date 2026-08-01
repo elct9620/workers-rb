@@ -22,8 +22,7 @@ RUN bundle exec rake wasm:fetch
 FROM ruby:3.4-slim
 
 ENV BUNDLE_PATH=/usr/local/bundle \
-    WORKERS_APP_DIR=/app \
-    WORKERS_DB_DIR=/data
+    WORKERS_APP_DIR=/app
 
 WORKDIR /srv/workers
 
@@ -33,12 +32,9 @@ COPY Gemfile Gemfile.lock config.ru ./
 COPY lib lib
 
 # The Host runs untrusted code, so it holds no more of the machine than it
-# needs to answer a request. The directory the databases sit in is created
-# here rather than left to the volume: a volume takes the ownership of the
-# directory it covers, and the Host is not the user that would otherwise own
-# it.
-RUN useradd --create-home --shell /usr/sbin/nologin workers \
- && install -d -o workers -g workers /data
+# needs to answer a request — and now that the databases are somewhere it
+# reaches rather than somewhere it writes, that is one directory less.
+RUN useradd --create-home --shell /usr/sbin/nologin workers
 USER workers
 
 # Answering at all is the signal — a path matching no Tenant is a 404 from a
