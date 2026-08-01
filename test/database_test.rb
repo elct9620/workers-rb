@@ -180,6 +180,26 @@ class DatabaseTest < TestHelper::Case
     end
   end
 
+  # A database that declines is the Tenant's to rescue like any other, and
+  # left unrescued it ends the request the way every Binding failure does.
+  # What separates it is what the operator reads: asking for more at once
+  # than the database takes is a limit to lower, not a network to go looking
+  # at.
+  def test_a_declined_statement_left_unrescued_is_a_binding_failure
+    declining
+
+    serving("declined", manifest: MAIN, source: <<~RUBY) do
+      App = ->(env) { DB::Main.query("select 1") }
+    RUBY
+      get "/declined"
+
+      assert_equal 500, last_response.status
+      assert_equal "binding_failure", last_response.body.strip
+      assert_includes recorded, "taking no more statements at once"
+      refute_includes recorded, "cannot reach"
+    end
+  end
+
   # The other side of that line: a statement the Tenant wrote is the Tenant's
   # to fix, and an operator paged for it would be paged for nothing.
   def test_a_statement_the_tenant_got_wrong_is_not_the_operators_to_see
@@ -195,6 +215,14 @@ class DatabaseTest < TestHelper::Case
   def stranding
     Workers::Host.set :databases,
                       Workers::Databases.new(url: "http://#{UNREACHABLE}", admin_url: "http://#{UNREACHABLE}")
+  end
+
+  # A server that answers every statement by saying it will take no more at
+  # once. It is reachable and the statement is sound, which is the whole of
+  # what separates this from `stranding`.
+  def declining
+    address = "http://127.0.0.1:#{Unresponsive.declining(429)}"
+    Workers::Host.set :databases, Workers::Databases.new(url: address, admin_url: address)
   end
 
   # The database as something other than the Host finds it, so which one the
