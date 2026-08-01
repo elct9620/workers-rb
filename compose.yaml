@@ -32,6 +32,12 @@ services:
     environment:
       SQLD_DB_PATH: /var/lib/sqld
       SQLD_ADMIN_LISTEN_ADDR: 0.0.0.0:8081
+      # Left at its default of an hour, the write-ahead log of a database
+      # under load grows for that hour: SQLite finishes a checkpoint only
+      # when no reader is holding the log, and a busy database never offers
+      # that. This is short enough that the quiet between bursts is used.
+      # README says how to choose it for traffic that is not this demo's.
+      SQLD_CHECKPOINT_INTERVAL_S: "30"
     volumes:
       - databases:/var/lib/sqld
     healthcheck:
