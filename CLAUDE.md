@@ -59,6 +59,11 @@ one that test ever reads — `serving` points the Host instead.
 running, and asserts only what no single process could show. `rake` does not
 run it; `rake e2e` does.
 
+The publish job checks nothing out: Docker's reusable workflow builds from the
+Git context, so only committed files reach the build. Anything the image needs
+that the repository does not carry is fetched inside the Dockerfile, which is
+where `rake wasm:fetch` already runs.
+
 `charts/workers` answers to `helm template` and `helm lint`, neither of which
 `rake` runs. The shared directory has no default, so both need a
 `--set sharedDirectory.storageClass=...` to reach anything: lint without one
