@@ -190,6 +190,17 @@ class HostTest < TestHelper::Case
     assert_includes recorded, "talkative out: worked on /fail"
   end
 
+  # B-13: what one invocation wrote ends with it. A capture that carried into
+  # the next would have the operator reading a Worker's earlier words as this
+  # request's, and reading them again on every request after that.
+  def test_what_one_invocation_wrote_does_not_reach_the_next
+    get "/talkative/first"
+    get "/talkative/second"
+
+    assert_includes recorded, "talkative out: worked on /second"
+    refute_includes recorded, "worked on /first"
+  end
+
   # An operator reading a Worker's last words needs to know they are its last
   # words rather than all of them. The request itself is unaffected: what the
   # limit bounds is what the Host keeps, not what the Worker may do.

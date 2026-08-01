@@ -187,7 +187,7 @@ These roles constitute the system. Later layers use these names exclusively.
 | B-09 | A Tenant is routed to for the first time | The Host creates a Sandbox, loads the Runtime Kit and that Tenant's `*.rb`, declares `Env`, `Time`, `Random`, and each Manifest Binding as pending, then dispatches the entrypoint |
 | B-10 | The Tenant has a Sandbox and its files are unchanged | That Sandbox serves the dispatch; source is not reloaded |
 | B-11 | The Tenant's files have changed | The Tenant's Sandbox is discarded and rebuilt per B-09, then dispatched |
-| B-12 | Concurrent requests to one Tenant | They share that Tenant's Sandbox; each invocation holds its own Bindings, output captures, and resource usage |
+| B-12 | Concurrent requests to one Tenant | They share that Tenant's Sandbox; each invocation holds its own Bindings and output captures |
 | B-13 | Any invocation ends | That invocation's supplied Bindings and output captures end with it and do not carry into the next |
 | B-14 | Tenant code reads the clock or draws a random number | The `Time` and `Random` Bindings supply them from the Host's clock and entropy; environment variables, filesystem paths, and network connections stay unreachable |
 | B-38 | Tenant code writes to the standard output or error stream during an invocation | The Host records what it wrote where the operator reads, naming the Tenant it came from. No part of it reaches the response |
