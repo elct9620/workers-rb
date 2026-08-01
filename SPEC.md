@@ -81,6 +81,7 @@ These roles constitute the system. Later layers use these names exclusively.
 - Create a declared Binding's database when it does not exist
 - Supply the `Time` and `Random` Bindings, which read the Host's clock and entropy
 - Compose the request environment from the request and pass it as the Worker's only argument, then hand the returned triplet to the HTTP layer
+- Refuse a request whose body is larger than the Host will carry, before any Worker runs
 - Narrow every Binding's guest-reachable method surface to an explicit allow list
 - Turn a Tenant's execution failure into an HTTP error response for that request
 - Record what an invocation wrote to its output streams, and what it could not reach or could not carry at once, where the operator reads
@@ -104,6 +105,7 @@ These roles constitute the system. Later layers use these names exclusively.
 **Output guarantees:**
 
 - Every request yields exactly one HTTP response; tenant code terminates the Host process under no outcome
+- A request body spends no more of the Host's memory than the limit, whatever the caller sends
 - `Env.node` reflects the Node that actually executed that invocation
 - Tenant code obtains the Host's environment variables, filesystem paths, and network connections under no circumstance
 - Tenant code reads exactly what the Host placed in the request environment, and reaches nothing the Host left out of it
@@ -260,6 +262,7 @@ These roles constitute the system. Later layers use these names exclusively.
 | E-10 | Tenant code leaves a Binding failure unrescued — a method outside the allow list, a pending Binding called before it is supplied, or a statement that failed | 500 marked as a binding failure. The Host records what it could not reach, or that more was asked at once than could be carried; a statement the Tenant itself got wrong it records nothing about |
 | E-11 | The shared directory is unreadable | Every Tenant endpoint answers 503; a cached Sandbox does not serve while the directory is unreadable; the Host records what it could not read |
 | E-12 | The Sandbox produces no recognisable result and its execution environment is corrupted | 503 marked as runtime corruption |
+| E-13 | A request carries a body larger than the Host will carry | 413. No Sandbox is reached and no Worker runs, and the Host reads no further than what tells it the body ran past the limit |
 
 ---
 
@@ -355,7 +358,7 @@ The Host composes one Hash per invocation and passes it whole. It carries these 
 | `headers` | A Hash of request headers, each name lowercased and appearing once, carrying the value the HTTP layer resolved for it |
 | `body` | The request body as a String |
 
-The environment is a value the Sandbox holds, not a Binding it dispatches to, so B-16's allow list does not apply to it and no read of it is refused. The request body is part of it and counts against the invocation's memory limit: a body the limit cannot hold ends the request per E-09 whatever the Worker does with it.
+The environment is a value the Sandbox holds, not a Binding it dispatches to, so B-16's allow list does not apply to it and no read of it is refused. The request body is part of it, and the Host reads no more of a body than it will carry: one past that ends the request per E-13, before a Sandbox is reached at all.
 
 #### Guest-reachable method surface
 
@@ -411,6 +414,7 @@ One set of limits applies to every Tenant; a Manifest does not alter them.
 |-------|-------|---------------|
 | Wall clock per invocation | 5 seconds | E-08 |
 | Memory per invocation | 16 MiB | E-09 |
+| Request body per invocation | 1 MiB | E-13 |
 | Captured output per invocation | 64 KiB each for the standard output and error streams | Output is clipped; the request still completes |
 
 #### Host limits
