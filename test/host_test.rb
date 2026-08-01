@@ -24,6 +24,50 @@ class HostTest < TestHelper::Case
     assert_equal 404, last_response.status
   end
 
+  # A Manifest is what publishes a Tenant, so source sitting beside no
+  # Manifest is source nobody published.
+  def test_a_directory_holding_no_manifest_is_no_tenant
+    serving("published") do |root|
+      dir = File.join(root, "unpublished")
+      FileUtils.mkdir_p(dir)
+      File.write(File.join(dir, "main.rb"), worker("here"))
+
+      get "/unpublished"
+
+      assert_equal 404, last_response.status
+    end
+  end
+
+  # A Tenant name reaches the cluster as a hostname label and names a database
+  # beside it, so a directory named outside the rule is one the Host declines
+  # to read as a Tenant at all.
+  def test_a_directory_named_outside_the_rule_is_no_tenant
+    serving("published") do |root|
+      %w[Hello -lead trail- under_score].each do |name|
+        publish(root, name)
+
+        get "/#{name}"
+
+        assert_equal 404, last_response.status, "#{name.inspect} routed"
+      end
+    end
+  end
+
+  def test_a_name_at_the_length_limit_is_a_tenant_and_one_past_it_is_not
+    longest = "a" * 63
+
+    serving(longest) do |root|
+      get "/#{longest}"
+
+      assert_equal 200, last_response.status
+
+      publish(root, "#{longest}a")
+      get "/#{longest}a"
+
+      assert_equal 404, last_response.status
+    end
+  end
+
   def test_the_manifest_names_the_entrypoint_the_host_dispatches
     get "/refused"
 
