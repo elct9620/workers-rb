@@ -20,7 +20,7 @@ README's opening states what runs today.
 | `lib/workers/runtime_kit.rb` | The mruby source every Sandbox carries ahead of tenant files |
 | `lib/workers/{node,databases,runtime}.rb` | Host configuration, read from the environment while the class body runs |
 | `compose.yaml` + `Caddyfile` | The cluster's shape: how many Nodes, what they share, what stands in front of them |
-| `charts/workers` | What a Kubernetes cluster is asked to run, and which of it an operator supplies rather than the chart |
+| `charts/workers` | What a Kubernetes cluster runs, and which of it an operator supplies rather than the chart |
 | `.github/workflows/ci.yml` | What has to answer before an image reaches GHCR, and which refs get published |
 | `tmp/*.md` | The exploration behind decisions SPEC.md only states. Not in version control |
 
@@ -59,15 +59,7 @@ one that test ever reads — `serving` points the Host instead.
 running, and asserts only what no single process could show. `rake` does not
 run it; `rake e2e` does.
 
-The publish job checks nothing out: Docker's reusable workflow builds from the
-Git context, so only committed files reach the build. Anything the image needs
-that the repository does not carry is fetched inside the Dockerfile, which is
-where `rake wasm:fetch` already runs.
-
-`charts/workers` answers to `helm template` and `helm lint`, neither of which
-`rake` runs. The shared directory has no default, so both need a
-`--set sharedDirectory.storageClass=...` to reach anything: lint without one
-reports an empty object name, which is the symptom rather than the cause. The
-Hosts carry no `runAsNonRoot` — the image's `USER` is a name rather than a UID
-and the kubelet cannot verify it, so asking would stop the Pod instead of
-hardening it.
+The publish job checks nothing out — Docker's reusable workflow builds from
+the Git context, so only committed files reach the image. The Hosts carry no
+`runAsNonRoot`: the image's `USER` is a name rather than a UID, which the
+kubelet cannot verify, so asking for it stops the Pod instead of hardening it.
