@@ -22,20 +22,42 @@ module Workers
         [ constant, databases.for(@name, identifier, errors: errors) ]
       }
 
-      triplet = sandbox.run(@manifest.entrypoint.to_sym, Environment.for(rack_request)) do |context|
+      execution = sandbox.run(@manifest.entrypoint.to_sym, Environment.for(rack_request)) do |context|
         context.bind("Env", Guest::Env.new(node: node, tenant: @name))
         context.bind("Time", Guest::Clock.new)
         context.bind("Random", Guest::Entropy.new)
         supplied.each { |constant, database| context.bind(constant, database) }
-      end.value
+      end
 
-      ensure_triplet(triplet)
-    rescue Kobako::TrapError
-      discard
+      record(execution, errors)
+      ensure_triplet(execution.value)
+    rescue Kobako::CarriesExecution => e
+      # The invocation that failed is the one whose output is worth most, and
+      # the one that returns no value to read it off. kobako hands the same
+      # captures out on the error, so the rescue says what the return would
+      # have.
+      record(e.execution, errors)
+      discard if e.is_a?(Kobako::TrapError)
       raise
     end
 
     private
+
+    # What the Worker wrote, where the operator reads. A Tenant has no other
+    # way to say anything that is not a response, and a line nobody can tell
+    # the Tenant or the stream of is a line nobody can act on — so every one
+    # of them carries both.
+    def record(execution, errors)
+      return unless execution && errors
+
+      say(errors, "out", execution.stdout, execution.stdout_truncated?)
+      say(errors, "err", execution.stderr, execution.stderr_truncated?)
+    end
+
+    def say(errors, stream, wrote, clipped)
+      wrote.each_line { |line| errors.puts("#{@name} #{stream}: #{line.chomp}") }
+      errors.puts("#{@name} #{stream}: clipped at the limit") if clipped
+    end
 
     def current
       @lock.synchronize do

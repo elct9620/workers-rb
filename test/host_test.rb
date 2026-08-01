@@ -110,6 +110,38 @@ class HostTest < TestHelper::Case
     assert_equal 200, last_response.status
   end
 
+  # A Worker's `puts` is its only way to say anything that is not a response.
+  # It reaches the operator, who is the one who can act on it, and it reaches
+  # the caller under no circumstance.
+  def test_what_a_worker_writes_reaches_the_operator_and_not_the_caller
+    get "/talkative/here"
+
+    assert_includes recorded, "talkative out: worked on /here"
+    assert_includes recorded, "talkative err: and had something to say about it"
+    refute_includes last_response.body, "worked on"
+  end
+
+  # The invocation that failed is the one whose output is worth most, and it
+  # is the one that never returns a value to read it off.
+  def test_a_worker_that_failed_still_says_what_it_wrote
+    get "/talkative/fail"
+
+    assert_equal 500, last_response.status
+    assert_includes recorded, "talkative out: worked on /fail"
+  end
+
+  # An operator reading a Worker's last words needs to know they are its last
+  # words rather than all of them. The request itself is unaffected: what the
+  # limit bounds is what the Host keeps, not what the Worker may do.
+  def test_output_past_the_limit_is_marked_as_clipped
+    Workers::Host.set :runtime, Workers::Runtime.default.with(output_limit: 8)
+    get "/talkative/here"
+
+    assert_equal 200, last_response.status
+    assert_includes recorded, "talkative out: clipped at the limit"
+    assert_includes recorded, "talkative err: clipped at the limit"
+  end
+
   def test_editing_a_tenant_serves_the_change_on_the_next_request
     serving("mutable", body: "first") do |root|
       get "/mutable"
@@ -185,6 +217,8 @@ class HostTest < TestHelper::Case
   end
 
   private
+
+  def recorded = last_request.env["rack.errors"].string
 
   def registry = Workers::Registry.const_get(:TENANTS, false)
 end
