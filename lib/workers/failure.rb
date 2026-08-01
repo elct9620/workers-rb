@@ -53,7 +53,7 @@ module Workers
       return new("compile_failure", 500) if compiling?(error)
 
       row = TABLE.find { |klass, _name, _status| error.is_a?(klass) }
-      new(row[1], row[2]) if row
+      new(row[1], row[2], defined_in(error)) if row
     end
 
     def self.compiling?(error)
@@ -61,17 +61,37 @@ module Workers
     end
     private_class_method :compiling?
 
+    # What the Sandbox does define, for the one failure a Tenant cannot
+    # otherwise correct: a misnamed entrypoint leaves the response as the only
+    # place the right name could come from. Every name here was loaded into
+    # the Sandbox — the Tenant's own and the Runtime Kit's — so none of them
+    # reaches outside it.
+    def self.defined_in(error)
+      error.is_a?(Kobako::UndefinedEntrypointError) ? error.available : []
+    end
+    private_class_method :defined_in
+
     attr_reader :name, :status
 
-    def initialize(name, status)
+    def initialize(name, status, defined = [])
       @name = name
       @status = status
+      @defined = defined
     end
 
-    # The failure class and nothing else: no Host environment variable, no
-    # filesystem path, no internal address.
+    # The failure class on a line of its own, and after it only names from
+    # inside the Sandbox: no Host environment variable, no filesystem path,
+    # no internal address.
     def to_response
-      [ status, { "content-type" => "text/plain; charset=utf-8" }, [ "#{name}\n" ] ]
+      [ status, { "content-type" => "text/plain; charset=utf-8" }, [ body ] ]
+    end
+
+    private
+
+    def body
+      return "#{name}\n" if @defined.empty?
+
+      "#{name}\ndefined: #{@defined.join(", ")}\n"
     end
   end
 end

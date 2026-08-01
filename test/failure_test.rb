@@ -27,6 +27,19 @@ class FailureTest < TestHelper::Case
     assert_failure 500, "undefined_entrypoint"
   end
 
+  # A Tenant that misnamed its entrypoint has the response and nothing else to
+  # correct it from. The names listed are its own and the Runtime Kit's, so
+  # answering with them says nothing about the Host.
+  def test_an_undefined_entrypoint_lists_what_the_sandbox_does_define
+    get "/noentry"
+
+    defined = last_response.body.lines.last
+
+    assert_match(/\Adefined: /, defined)
+    assert_includes defined, "App", "the Tenant defines this and the Manifest asked for another"
+    assert_includes defined, "Request", "the Runtime Kit's constants are the Sandbox's too"
+  end
+
   def test_an_exception_the_worker_does_not_rescue_is_a_tenant_exception
     get "/broken"
 
@@ -141,8 +154,10 @@ class FailureTest < TestHelper::Case
     skip "the superuser reads an unreadable directory" if Process.uid.zero?
   end
 
+  # The failure class is the whole of the first line, whatever a failure goes
+  # on to say for itself after it.
   def assert_failure(status, name)
     assert_equal status, last_response.status
-    assert_equal name, last_response.body.strip
+    assert_equal name, last_response.body.lines.first.strip
   end
 end
