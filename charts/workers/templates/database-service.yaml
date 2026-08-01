@@ -1,0 +1,25 @@
+{{- if .Values.databases.deploy }}
+{{/*
+The name every Host runs statements against. It is headless, so what the name
+resolves to is the server's own address rather than one the cluster balances
+to — which is what lets a Host reach the admin port through the same name
+without that port being published to everything in the cluster.
+
+Only a serving server is in the name at all: a Host that resolves nothing has
+one less thing to wait on.
+*/}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "workers.db.fullname" . }}
+  labels:
+    {{- include "workers.db.labels" . | nindent 4 }}
+spec:
+  clusterIP: None
+  ports:
+    - name: hrana
+      port: 8080
+      targetPort: hrana
+  selector:
+    {{- include "workers.db.selectorLabels" . | nindent 4 }}
+{{- end }}

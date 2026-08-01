@@ -2,6 +2,11 @@
 The Hosts. Nothing distinguishes one from another — the same image, the same
 configuration, the same directory — so they are replicas rather than members,
 and the Pod a request lands on is the Node its `Env.node` reports.
+
+Nothing here waits for the database server. A Host serves every Tenant that
+declared no Binding without it, and a Tenant that did declare one is answered
+by the Host giving up on a database it cannot reach — which is the behaviour,
+not a gap in it.
 */}}
 apiVersion: apps/v1
 kind: Deployment

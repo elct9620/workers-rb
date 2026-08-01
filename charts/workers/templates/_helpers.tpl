@@ -58,6 +58,22 @@ without any of them reporting an error.
 {{- printf "%s-db" (include "workers.fullname" .) -}}
 {{- end -}}
 
+{{- define "workers.db.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "workers.name" . }}
+app.kubernetes.io/instance: {{ .Release.Name }}
+app.kubernetes.io/component: database
+{{- end -}}
+
+{{/*
+The database server carries no `version` label: what it runs is the image an
+operator named, which the chart's own appVersion does not speak for.
+*/}}
+{{- define "workers.db.labels" -}}
+helm.sh/chart: {{ printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
+{{ include "workers.db.selectorLabels" . }}
+app.kubernetes.io/managed-by: {{ .Release.Service }}
+{{- end -}}
+
 {{/*
 Where a Host runs statements, and where it has a database made that a Manifest
 declared but nothing created yet. The service this resolves to is headless, so

@@ -1,0 +1,91 @@
+{{- if .Values.databases.deploy }}
+{{/*
+Every Tenant's databases, held where all the Hosts reach them. One server for
+all of them satisfies what a Manifest's Binding needs without anything between
+them: a write from any Host is there for the next request wherever it lands.
+
+The name it answers to is what a Host names a database in, so one server holds
+them all without a name per database to resolve.
+*/}}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "workers.db.fullname" . }}
+  labels:
+    {{- include "workers.db.labels" . | nindent 4 }}
+spec:
+  serviceName: {{ include "workers.db.fullname" . }}
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "workers.db.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "workers.db.selectorLabels" . | nindent 8 }}
+    spec:
+      containers:
+        - name: sqld
+          image: {{ .Values.databases.image }}
+          args:
+            - /bin/sqld
+            - --enable-namespaces
+            - --disable-default-namespace
+          ports:
+            - name: hrana
+              containerPort: 8080
+            - name: admin
+              containerPort: 8081
+          env:
+            - name: SQLD_DB_PATH
+              value: /var/lib/sqld
+            - name: SQLD_ADMIN_LISTEN_ADDR
+              value: 0.0.0.0:8081
+            - name: SQLD_CHECKPOINT_INTERVAL_S
+              value: {{ .Values.databases.checkpointIntervalSeconds | quote }}
+          # Asked on the port that serves statements rather than the one that
+          # manages databases, so what it answers for is the path a Tenant
+          # uses. It says whether the server is serving and nothing about any
+          # one database — a Tenant's own can stop answering while this stays
+          # green, which is why the Host gives up on that one itself.
+          startupProbe:
+            httpGet:
+              path: /health
+              port: hrana
+            periodSeconds: 5
+            failureThreshold: 6
+          # Failing this only takes the server out of the name the Hosts
+          # resolve, leaving them to give up on it on their own terms.
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: hrana
+            periodSeconds: 5
+            failureThreshold: 2
+          # Failing this restarts the server, which costs a write-ahead log to
+          # replay — so it is given longer to answer than readiness is.
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: hrana
+            periodSeconds: 10
+            failureThreshold: 3
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/sqld
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        # Left out when no class is named, so the cluster's default provisions
+        # it. Naming the empty string here would ask for a volume that carries
+        # no class at all, which nothing provisions.
+        {{- with .Values.databases.storageClass }}
+        storageClassName: {{ . | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.databases.size }}
+{{- end }}
