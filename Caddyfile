@@ -1,5 +1,5 @@
 # The tunnel's stand-in for the local cluster: one address in front of every
-# Node, matching SPEC.md B-39.
+# Node, matching SPEC.md B-37.
 #
 # A Tenant reaches the cluster under a domain it declares for itself, so the
 # set of hostnames is not knowable here. The proxy answers to all of them and

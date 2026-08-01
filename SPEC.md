@@ -227,14 +227,15 @@ These roles constitute the system. Later layers use these names exclusively.
 | B-31 | Any failure in any Tenant | Other Tenants' requests are unaffected and the Host process keeps running |
 | B-32 | A trap-class failure | The Tenant's Sandbox is discarded and the next request rebuilds it per B-09, and that Tenant's other in-flight invocations end with the same failure class |
 | B-33 | Any failure response | Carries no Host environment variable, filesystem path, or internal address; a failure in tenant execution additionally carries its failure class |
+| B-34 | A Binding's database stops answering + requests to that Tenant keep arriving | The Host stops reaching for it, and those requests end without waiting on it; once it answers again, that Tenant reaches it again, with nothing restarted |
 
 ### F-08 — Deployment topology
 
 | ID | State + Operation | Result |
 |----|-------------------|--------|
-| B-34 | The Host workload runs on several Nodes + the shared directory is mounted on each | Every Node sees the same set of Tenants |
-| B-35 | The Host workload runs on several Nodes + a Tenant declares a Binding | Every Node reads and writes that Tenant's database |
-| B-36 | The tunnel service points at the internal service | Requests to the external domain reach a Host on any Node |
+| B-35 | The Host workload runs on several Nodes + the shared directory is mounted on each | Every Node sees the same set of Tenants |
+| B-36 | The Host workload runs on several Nodes + a Tenant declares a Binding | Every Node reads and writes that Tenant's database |
+| B-37 | The tunnel service points at the internal service | Requests to the external domain reach a Host on any Node |
 
 ### Error Scenarios
 
@@ -423,3 +424,4 @@ A database is named `<tenant>-<database identifier>`. A database identifier carr
 | Any disagreement between the shared directory and cached Host state | The shared directory governs |
 | Any failure message returned to a tenant or outward | Carry at most the failure class and the tenant's own information |
 | Any failure the Host caused rather than the Tenant | Record it where the operator reads, naming what could not be reached. The response is unchanged: a failure class alone cannot say whose fault it was, and only the operator can act on the difference |
+| Any dependency the Host cannot reach | Stop reaching for it until it answers again, and tell the operator that once rather than for every request that follows. A Host that waits on it every time spends its capacity learning what it already knows, and denies the dependency whatever quiet it needs to recover |
