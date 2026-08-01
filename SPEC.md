@@ -105,7 +105,7 @@ These roles constitute the system. Later layers use these names exclusively.
 **Output guarantees:**
 
 - Every request yields exactly one HTTP response; tenant code terminates the Host process under no outcome
-- A request body spends no more of the Host's memory than the limit, whatever the caller sends
+- A request body larger than the limit is turned away rather than read, whatever the caller sends
 - `Env.node` reflects the Node that actually executed that invocation
 - Tenant code obtains the Host's environment variables, filesystem paths, and network connections under no circumstance
 - Tenant code reads exactly what the Host placed in the request environment, and reaches nothing the Host left out of it
@@ -113,7 +113,7 @@ These roles constitute the system. Later layers use these names exclusively.
 #### Control — what the Host controls / depends on
 
 - **Controls:** route resolution, Sandbox lifecycle, the content and method surface of each Binding, the creation of each Binding's database, and the mapping from failure to HTTP status
-- **Depends on:** kobako's isolation and error classification, the Sandbox's mruby build providing JSON generation, ASCII Regexp, and a String large enough to hold a request body, the database server holding the Tenants' databases being reachable for reading and writing from every Node, the readability of the shared directory, the hostname the operating system reports for this Node, and the Gateway's external connectivity
+- **Depends on:** kobako's isolation and error classification, the Sandbox's mruby build providing JSON generation and ASCII Regexp and holding a request body in one String, the database server holding the Tenants' databases being reachable for reading and writing from every Node, the readability of the shared directory, the hostname the operating system reports for this Node, and the Gateway's external connectivity
 
 ### Feature List
 

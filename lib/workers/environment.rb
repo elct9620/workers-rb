@@ -32,7 +32,7 @@ module Workers
 
     # `BodyLimit` refuses on the length a request declares, and a request that
     # declared none reaches here anyway. One byte past the limit is what says
-    # the body ran past it, so the Host holds no more than it will carry.
+    # the body ran past it, and nothing further is read.
     def self.body(rack_request)
       input = rack_request.body
       return "" if input.nil?

@@ -17,13 +17,12 @@ module Workers
     # a corrupted runtime for rather than an answer.
     BYTES = 512 * 1024
 
-    def initialize(app, limit: BYTES)
+    def initialize(app)
       @app = app
-      @limit = limit
     end
 
     def call(env)
-      return refused if env["CONTENT_LENGTH"].to_i > @limit
+      return refused if env["CONTENT_LENGTH"].to_i > BYTES
 
       @app.call(env)
     end

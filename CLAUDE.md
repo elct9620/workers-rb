@@ -15,6 +15,7 @@ README's opening states what runs today.
 | `lib/workers/guest.rb` | Every Host object tenant code can reach, and the methods it may call on each |
 | `lib/workers/hrana.rb` | How a statement reaches the database server, which failures are the operator's rather than the Tenant's, and when the Host stops reaching at all |
 | `lib/workers/environment.rb` | Which request fields cross into the guest |
+| `lib/workers/body_limit.rb` | What one request body may cost this Host, turned away ahead of everything that would read it |
 | `lib/workers/manifest.rb` | What `app.json` may say, and what makes a Tenant unroutable |
 | `lib/workers/runtime_kit.rb` | The mruby source every Sandbox carries ahead of tenant files |
 | `lib/workers/{node,databases,runtime}.rb` | Host configuration, read from the environment while the class body runs |
@@ -25,7 +26,10 @@ README's opening states what runs today.
 
 kobako is a sibling project at `../kobako`, not a public gem. Its `SPEC.md`
 and `docs/behavior/` are the authoritative account of sandbox semantics and no
-web search reaches them — read them rather than inferring.
+web search reaches them — read them rather than inferring. A String the
+guest's mruby build will not hold is what a dispatch carrying one gets a
+corrupted runtime for rather than an error, and it is what sets the request
+body limit.
 
 Ruby under `app/`, `e2e/app/`, and `test/fixtures/app/` is tenant code running
 on mruby, not host Ruby. RuboCop excludes it, and its language is whatever the
