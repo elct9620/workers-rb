@@ -42,7 +42,7 @@ workers-rb builds a self-hostable, multi-tenant edge function platform on kobako
 - A control-plane API and tenant authentication — the shared directory is the only deployment interface
 - Bindings other than SQLite (KV, object storage, queues, durable objects)
 - Schema definition and migration for tenant databases — tenant code creates its own tables
-- A database replica per Node — every Node reaches one database server, which the Host neither replicates, shards, nor fails over between
+- Replicating, sharding, or failing over a Tenant's databases — how the data is held is the operator's
 - An online editor, version management, or rollback for tenant code
 - Tenant runtimes other than mruby
 - Reimplementing or wrapping kobako's sandbox semantics — kobako provides the isolation guarantees
@@ -206,14 +206,14 @@ These roles constitute the system. Later layers use these names exclusively.
 | ID | State + Operation | Result |
 |----|-------------------|--------|
 | B-18 | The Manifest declares a Binding + every invocation | The Host supplies the corresponding SQLite Binding under the declared constant name |
-| B-19 | A declared Binding's database does not exist + the Binding is supplied | The Host creates it, then supplies it |
+| B-19 | A declared Binding's database does not exist + tenant code uses the Binding | The Host has one made, and the statement runs against it |
 | B-20 | Tenant code queries a Binding | Returns an Array of rows, each a Hash of column name to value |
 | B-21 | Tenant code writes to a Binding | The write completes and returns the affected row count, whichever Node serves the request |
 | B-22 | A later request queries the same Binding after a write | The query reflects that write, whichever Node serves it |
 | B-23 | A statement a Tenant executes against a Binding fails in the database | The failure reaches tenant code as an exception it may rescue |
 | B-24 | A Binding constant the Manifest does not declare | The constant does not exist in the Sandbox and referencing it raises `NameError`, which tenant code may rescue and which stays distinguishable from a declared Binding that is not yet supplied |
 | B-25 | A Tenant's Binding constant | Resolves only to a database that Tenant declared |
-| B-40 | A statement outlasts the statement limit, whether waiting for the database to answer or for a statement ahead of it | It fails as an exception the Tenant may rescue, rather than running the invocation's own clock out |
+| B-40 | A statement outlasts the statement limit | It fails as an exception the Tenant may rescue, rather than running the invocation's own clock out |
 | B-41 | The database answers a statement by declining to take more at once | The refusal reaches tenant code as an exception it may rescue, and the Host records that it is asking the database for more than it takes — not that it could not reach it |
 
 ### F-06 — Runtime Kit
@@ -231,7 +231,7 @@ These roles constitute the system. Later layers use these names exclusively.
 |----|-------------------|--------|
 | B-30 | The Worker returns a valid Rack response triplet | The Host hands it to the HTTP layer unchanged |
 | B-31 | Any failure in any Tenant | Other Tenants' requests are unaffected and the Host process keeps running |
-| B-32 | A trap-class failure | The Tenant's Sandbox is discarded and the next request rebuilds it per B-09; that Tenant's other in-flight invocations reach their own outcome, unaffected |
+| B-32 | A trap-class failure | The Tenant's Sandbox is discarded and the next request rebuilds it per B-09 |
 | B-33 | Any failure response | Carries no Host environment variable, filesystem path, or internal address; a failure in tenant execution additionally carries its failure class |
 | B-34 | A Binding's database stops answering + requests to that Tenant keep arriving | The Host stops reaching for it, and those requests end without waiting on it; once it answers again, that Tenant reaches it again, with nothing restarted |
 
@@ -257,11 +257,10 @@ These roles constitute the system. Later layers use these names exclusively.
 | E-08 | Tenant code exceeds the timeout | 503 marked as a timeout |
 | E-09 | Tenant code exhausts the memory limit | 503 marked as a memory limit |
 | E-10 | Tenant code leaves a refused Binding call unrescued — a method outside the allow list, or a pending Binding called before it is supplied | 500 marked as a binding failure |
-| E-11 | A Binding's database cannot be created or opened | 500 marked as a binding failure; the Host records what it could not reach |
-| E-12 | A write to a Binding cannot be completed | 500 marked as a binding failure; the Host records what it could not reach |
-| E-13 | The shared directory is unreadable | Every Tenant endpoint answers 503; a cached Sandbox does not serve while the directory is unreadable; the Host records what it could not read |
-| E-14 | The Sandbox produces no recognisable result and its execution environment is corrupted | 503 marked as runtime corruption |
-| E-15 | Tenant code leaves a declined statement unrescued | 500 marked as a binding failure; the Host records that it is asking the database for more than it takes |
+| E-11 | The Host cannot reach a Binding's database | 500 marked as a binding failure; the Host records what it could not reach |
+| E-12 | The shared directory is unreadable | Every Tenant endpoint answers 503; a cached Sandbox does not serve while the directory is unreadable; the Host records what it could not read |
+| E-13 | The Sandbox produces no recognisable result and its execution environment is corrupted | 503 marked as runtime corruption |
+| E-14 | Tenant code leaves a declined statement unrescued | 500 marked as a binding failure; the Host records that it is asking the database for more than it takes |
 
 ---
 
@@ -295,8 +294,7 @@ The operator supplies these to each Host as environment variables. They are clus
 |---------|---------|
 | Base domain | The suffix under which `<tenant>.<base>` resolves per B-07 |
 | Shared directory | The mount path holding `/app/<tenant>/` |
-| Database address | Where this Host runs a Tenant's statements |
-| Database admin address | Where this Host has a declared database made per B-19 |
+| Database address | Where this Host reaches a Tenant's databases |
 
 #### Manifest
 
@@ -397,7 +395,7 @@ The Runtime Kit defines `Request` and `Response`, and nothing else.
 | `Request` | `#request_method` `#script_name` `#path` `#query` `#headers` `#body` | The value the environment carries under the key of that name |
 | `Response` | `.text(body, status:, headers:)` | A Rack triplet with `content-type: text/plain; charset=utf-8` |
 | `Response` | `.json(data, status:, headers:)` | A Rack triplet with `content-type: application/json`, its body the JSON form of `data` |
-| `Response` | `.status(code, body)` | A Rack triplet with `content-type: text/plain; charset=utf-8` |
+| `Response` | `.status(code, body = "")` | A Rack triplet with `content-type: text/plain; charset=utf-8` |
 
 ```ruby
 App = ->(env) {
@@ -424,7 +422,7 @@ What one Host holds and how long it waits. The statement limit stays under the w
 |-------|-------|------------------|
 | Sandboxes held per Host | 64 Tenants, least recently reached first out | B-39 |
 | Wall clock per statement | 2 seconds | B-40 |
-| Statements in flight per database address | 5 | B-40 |
+| Statements in flight per Host | 5 | B-40 |
 | Quiet given a database that stopped answering | 60 seconds | B-34 |
 
 #### Database naming
