@@ -290,6 +290,26 @@ class HostTest < TestHelper::Case
     end
   end
 
+  # Holding the Sandbox is what makes the second request cheaper than the
+  # first, and nothing the guest sees says which one served it — snippets
+  # replay either way. So the assertion reads the Tenant holding it, and the
+  # rewrite that follows is what says the reading is worth anything.
+  def test_a_tenant_whose_files_are_unchanged_keeps_the_sandbox_it_built
+    serving("steady", body: "first") do |root|
+      get "/steady"
+      built = sandbox_of("steady")
+
+      get "/steady"
+
+      assert_same built, sandbox_of("steady"), "an unchanged Tenant was given a new Sandbox"
+
+      publish(root, "steady", body: "second")
+      get "/steady"
+
+      refute_same built, sandbox_of("steady"), "the Sandbox outlived the source it was built from"
+    end
+  end
+
   def test_concurrent_requests_to_one_tenant_each_carry_their_own_bindings
     paths = 8.times.map { |n|
       Thread.new { Rack::MockRequest.new(Workers::Host).get("/surface/req#{n}") }
@@ -338,4 +358,9 @@ class HostTest < TestHelper::Case
   def recorded = last_request.env["rack.errors"].string
 
   def registry = Workers::Registry.const_get(:TENANTS, false)
+
+  def sandbox_of(name)
+    _, entry = registry.find { |(dir, _), _| File.basename(dir) == name }
+    entry.tenant.instance_variable_get(:@sandbox)
+  end
 end
