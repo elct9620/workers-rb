@@ -256,11 +256,9 @@ These roles constitute the system. Later layers use these names exclusively.
 | E-07 | The Worker's return value is not a valid Rack response triplet | 500 marked as an invalid response |
 | E-08 | Tenant code exceeds the timeout | 503 marked as a timeout |
 | E-09 | Tenant code exhausts the memory limit | 503 marked as a memory limit |
-| E-10 | Tenant code leaves a refused Binding call unrescued — a method outside the allow list, or a pending Binding called before it is supplied | 500 marked as a binding failure |
-| E-11 | The Host cannot reach a Binding's database | 500 marked as a binding failure; the Host records what it could not reach |
-| E-12 | The shared directory is unreadable | Every Tenant endpoint answers 503; a cached Sandbox does not serve while the directory is unreadable; the Host records what it could not read |
-| E-13 | The Sandbox produces no recognisable result and its execution environment is corrupted | 503 marked as runtime corruption |
-| E-14 | Tenant code leaves a declined statement unrescued | 500 marked as a binding failure; the Host records that it is asking the database for more than it takes |
+| E-10 | Tenant code leaves a Binding failure unrescued — a method outside the allow list, a pending Binding called before it is supplied, or a statement that failed | 500 marked as a binding failure. The Host records what it could not reach, or that more was asked at once than could be carried; a statement the Tenant itself got wrong it records nothing about |
+| E-11 | The shared directory is unreadable | Every Tenant endpoint answers 503; a cached Sandbox does not serve while the directory is unreadable; the Host records what it could not read |
+| E-12 | The Sandbox produces no recognisable result and its execution environment is corrupted | 503 marked as runtime corruption |
 
 ---
 
@@ -372,7 +370,7 @@ Calls to methods outside these tables are refused per B-16.
 | `Time` | `now` | The current Unix time in seconds, as a Float |
 | `Random` | `rand(limit = nil)` | An Integer in `0...limit`, or a Float in `0.0...1.0` when `limit` is omitted |
 
-A row's values reach tenant code as Integer, Float, String, or nil.
+A row's values reach tenant code as Integer, Float, String, or nil. A parameter carries the same kinds; a value of any other kind fails the statement as an exception the Tenant may rescue.
 
 #### Request path splitting
 
@@ -416,13 +414,14 @@ One set of limits applies to every Tenant; a Manifest does not alter them.
 
 #### Host limits
 
-What one Host holds and how long it waits. The statement limit stays under the wall clock per invocation by enough for a Worker to answer the failure.
+What one Host holds, how long it waits, and how many times it tries. The statement limit stays under the wall clock per invocation by enough for a Worker to answer the failure.
 
 | Limit | Value | When it runs out |
 |-------|-------|------------------|
 | Sandboxes held per Host | 64 Tenants, least recently reached first out | B-39 |
 | Wall clock per statement | 2 seconds | B-40 |
 | Statements in flight per Host | 5 | B-40 |
+| Attempts given a database that is not answering | 3 | B-34 |
 | Quiet given a database that stopped answering | 60 seconds | B-34 |
 
 #### Database naming
@@ -441,5 +440,5 @@ A database is named `<tenant>-<database identifier>`. A database identifier carr
 | Any routing ambiguity | Treat it as not routable rather than guessing the target Tenant |
 | Any disagreement between the shared directory and cached Host state | The shared directory governs |
 | Any failure message returned to a tenant or outward | Carry at most the failure class and the tenant's own information |
-| Any failure the Host caused rather than the Tenant | Record it where the operator reads, naming what could not be reached. The response is unchanged: a failure class alone cannot say whose fault it was, and only the operator can act on the difference |
+| Any failure the Host caused rather than the Tenant | Record it where the operator reads, naming what could not be reached, or that more was asked at once than could be carried. The response is unchanged: a failure class alone cannot say whose fault it was, and only the operator can act on the difference |
 | Any dependency the Host cannot reach | Stop reaching for it until it answers again, and tell the operator that once rather than for every request that follows. A Host that waits on it every time spends its capacity learning what it already knows, and denies the dependency whatever quiet it needs to recover |
