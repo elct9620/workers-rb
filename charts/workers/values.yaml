@@ -1,0 +1,51 @@
+# How many Hosts answer. Each one is identical — no setting below belongs to
+# one of them rather than another. One Host answers requests; several are what
+# make `Env.node` worth reading.
+nodes: 3
+
+# The suffix under which `<tenant>.<base>` reaches a Tenant. A Tenant also
+# answers at `/<tenant>` and at whatever domain its Manifest declares, neither
+# of which this names.
+baseDomain: workers.test
+
+image:
+  repository: ghcr.io/elct9620/workers-rb
+  # Empty follows the chart's appVersion. Naming a released tag here is what
+  # pins a cluster to one, and is what makes `helm upgrade` roll the Hosts —
+  # a tag that has not changed leaves the Pods where they are.
+  tag: ""
+  pullPolicy: IfNotPresent
+
+# Where Tenants are published. Every Host reads the same one, so a change made
+# through it reaches the next request on all of them.
+#
+# There is no default: a directory only one Host can read makes a cluster that
+# disagrees with itself about which Tenants exist, and it does so silently.
+# Supply an existing ReadWriteMany claim, or a class that can provision one.
+sharedDirectory:
+  existingClaim: ""
+  storageClass: ""
+  size: 1Gi
+
+databases:
+  # False leaves the databases to a server this chart did not install, named by
+  # `url` and `adminUrl` below.
+  deploy: true
+  url: ""
+  adminUrl: ""
+
+  image: ghcr.io/tursodatabase/libsql-server:v0.24.32
+
+  # One server holds every Tenant's database, so this is where they all live.
+  # Empty follows the cluster's default class — which decides whether a lost
+  # machine means the database is rescheduled or waited for.
+  #
+  # NFS does not serve here: SQLite's locking is what a shared directory can
+  # afford to be casual about and a database cannot.
+  storageClass: ""
+  size: 10Gi
+
+  # sqld finishes a checkpoint only when no reader holds the write-ahead log,
+  # so this is how soon a quiet moment is used rather than how often one is
+  # forced. README says how to choose it for traffic that is not the demo's.
+  checkpointIntervalSeconds: 30

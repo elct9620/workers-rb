@@ -1,0 +1,21 @@
+{{/*
+The cluster's internal service, and the one address the Gateway is pointed at.
+Whatever gives the cluster its external address — a tunnel, a reverse proxy, a
+load balancer — reaches the Hosts through this name and no other way; a type
+that published it would put a Host on the public network itself, which is the
+one thing the Gateway exists to prevent.
+*/}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "workers.fullname" . }}
+  labels:
+    {{- include "workers.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 9292
+      targetPort: http
+  selector:
+    {{- include "workers.selectorLabels" . | nindent 4 }}

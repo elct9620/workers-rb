@@ -1,6 +1,7 @@
 .git
 .gitignore
 app
+charts
 e2e
 test
 tmp

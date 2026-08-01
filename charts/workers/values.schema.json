@@ -1,0 +1,54 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "workers",
+  "description": "What an operator may say. A value outside these bounds is refused while `helm install` runs, rather than by a Pod that will not start. Which fields are needed depends on other fields, and the templates say so where they read them.",
+  "type": "object",
+  "required": ["nodes", "baseDomain", "image", "sharedDirectory", "databases"],
+  "additionalProperties": false,
+  "properties": {
+    "nodes": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "How many Hosts answer."
+    },
+    "baseDomain": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The suffix under which <tenant>.<base> reaches a Tenant."
+    },
+    "image": {
+      "type": "object",
+      "required": ["repository", "pullPolicy"],
+      "additionalProperties": false,
+      "properties": {
+        "repository": { "type": "string", "minLength": 1 },
+        "tag": { "type": "string" },
+        "pullPolicy": { "enum": ["Always", "IfNotPresent", "Never"] }
+      }
+    },
+    "sharedDirectory": {
+      "type": "object",
+      "required": ["existingClaim", "storageClass", "size"],
+      "additionalProperties": false,
+      "properties": {
+        "existingClaim": { "type": "string" },
+        "storageClass": { "type": "string" },
+        "size": { "type": "string", "pattern": "^[0-9]+(\\.[0-9]+)?(Ki|Mi|Gi|Ti|K|M|G|T)?$" }
+      }
+    },
+    "databases": {
+      "type": "object",
+      "required": ["deploy", "image", "storageClass", "size", "checkpointIntervalSeconds"],
+      "additionalProperties": false,
+      "properties": {
+        "deploy": { "type": "boolean" },
+        "url": { "type": "string" },
+        "adminUrl": { "type": "string" },
+        "image": { "type": "string", "minLength": 1 },
+        "storageClass": { "type": "string" },
+        "size": { "type": "string", "pattern": "^[0-9]+(\\.[0-9]+)?(Ki|Mi|Gi|Ti|K|M|G|T)?$" },
+        "checkpointIntervalSeconds": { "type": "integer", "minimum": 1 }
+      }
+    }
+  }
+}

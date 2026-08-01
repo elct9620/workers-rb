@@ -1,0 +1,59 @@
+{{/*
+The Hosts. Nothing distinguishes one from another — the same image, the same
+configuration, the same directory — so they are replicas rather than members,
+and the Pod a request lands on is the Node its `Env.node` reports.
+*/}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "workers.fullname" . }}
+  labels:
+    {{- include "workers.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.nodes }}
+  selector:
+    matchLabels:
+      {{- include "workers.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "workers.selectorLabels" . | nindent 8 }}
+    spec:
+      containers:
+        - name: workers
+          image: {{ include "workers.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 9292
+          env:
+            - name: WORKERS_BASE_DOMAIN
+              value: {{ .Values.baseDomain | quote }}
+            - name: WORKERS_DB_URL
+              value: {{ include "workers.db.url" . | quote }}
+            - name: WORKERS_DB_ADMIN_URL
+              value: {{ include "workers.db.adminUrl" . | quote }}
+          # A Host that is up answers a path matching no Tenant with a 404,
+          # which an HTTP probe reads as a failure and would restart every Pod
+          # of a cluster serving no Tenants yet. What says this Host can take a
+          # request is that it is listening: the shared directory is read when
+          # the first request asks for a Tenant, not before.
+          readinessProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: 10
+            failureThreshold: 3
+          volumeMounts:
+            # Tenants are published by processes outside the Host, so a Host
+            # holds no more of the directory than reading it needs.
+            - name: app
+              mountPath: /app
+              readOnly: true
+      volumes:
+        - name: app
+          persistentVolumeClaim:
+            claimName: {{ include "workers.sharedClaim" . }}

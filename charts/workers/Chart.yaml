@@ -1,0 +1,16 @@
+apiVersion: v2
+name: workers
+description: A multi-tenant edge function platform serving untrusted Ruby from a shared directory
+type: application
+
+# The chart's own version. It moves when the shape of the cluster moves, which
+# is not when the Host does.
+version: 0.1.0
+
+# What `image.tag` defaults to. This prototype publishes no release yet, so the
+# default follows `main` and an operator who wants a fixed one sets `image.tag`.
+appVersion: "main"
+
+home: https://github.com/elct9620/workers-rb
+sources:
+  - https://github.com/elct9620/workers-rb
