@@ -49,7 +49,9 @@ build-iPhoneSimulator/
 # Used by RuboCop. Remote config files pulled in from inherit_from directive.
 # .rubocop-https?--*
 
-# The guest binary, fetched by `rake wasm:fetch` rather than tracked.
+# The binaries the Host runs tenant code on and the suite drives databases
+# through, fetched by `rake wasm:fetch` and `rake sqld:fetch` rather than
+# tracked.
 /vendor/
 
 # Tenant code the Host serves. It belongs to whoever publishes it, not to

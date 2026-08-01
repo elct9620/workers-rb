@@ -3,6 +3,7 @@
 require "bundler/setup"
 require "open-uri"
 require "rake/testtask"
+require "tmpdir"
 require "kobako/version"
 
 # Tenant code needs JSON and ASCII Regexp, which the guest binary bundled in
@@ -21,6 +22,38 @@ end
 namespace :wasm do
   desc "Download the guest binary the Host runs tenant code on"
   task fetch: GUEST_BINARY
+end
+
+# The suite drives a real database server rather than a stand-in, so what the
+# DB Binding is tested against is what the cluster runs. It ships as a release
+# asset, and the suite names the version it expects, so fetching and driving
+# cannot disagree about which one that is.
+require_relative "test/sqld"
+
+SQLD_TARGET = [
+  RbConfig::CONFIG["host_cpu"] == "x86_64" ? "x86_64" : "aarch64",
+  RbConfig::CONFIG["host_os"].include?("darwin") ? "apple-darwin" : "unknown-linux-gnu"
+].join("-")
+SQLD_BINARY = "vendor/sqld-#{Sqld::VERSION}"
+SQLD_RELEASE = "https://github.com/tursodatabase/libsql/releases/download/libsql-server-v#{Sqld::VERSION}"
+
+file SQLD_BINARY do |task|
+  mkdir_p File.dirname(task.name)
+  Dir.mktmpdir do |staging|
+    archive = File.join(staging, "sqld.tar.xz")
+    URI.parse("#{SQLD_RELEASE}/libsql-server-#{SQLD_TARGET}.tar.xz")
+       .open { |remote| IO.copy_stream(remote, archive) }
+    # The release carries a licence and a readme beside the server; only the
+    # server is what the suite needs.
+    sh "tar", "-xJf", archive, "-C", staging, "libsql-server-#{SQLD_TARGET}/sqld"
+    mv File.join(staging, "libsql-server-#{SQLD_TARGET}", "sqld"), task.name
+  end
+  chmod 0o755, task.name
+end
+
+namespace :sqld do
+  desc "Download the database server the suite drives"
+  task fetch: SQLD_BINARY
 end
 
 SAMPLE_MANIFEST = <<~'JSON'
@@ -78,5 +111,5 @@ Rake::TestTask.new(e2e: "e2e:publish") do |task|
   task.test_files = FileList["e2e/*_test.rb"]
 end
 
-task test: "wasm:fetch"
+task test: [ "wasm:fetch", "sqld:fetch" ]
 task default: :test
