@@ -14,9 +14,10 @@ baseDomain: workers.test
 
 image:
   repository: ghcr.io/elct9620/workers-rb
-  # Empty follows the chart's appVersion. Naming a released tag here is what
-  # pins a cluster to one, and is what makes `helm upgrade` roll the Hosts —
-  # a tag that has not changed leaves the Pods where they are.
+  # Empty is the Host this chart was released with, which is what pinning the
+  # chart's version already pinned. Naming a tag here runs a different Host
+  # than the release names, and is what makes `helm upgrade` roll the Pods —
+  # a tag that has not changed leaves them where they are.
   tag: ""
   pullPolicy: IfNotPresent
 

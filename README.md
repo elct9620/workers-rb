@@ -106,7 +106,23 @@ writes was back to zero within 30 seconds of the writes stopping.
 shared directory, one database server they all name, and one internal address.
 
 ```sh
+helm install workers oci://ghcr.io/elct9620/workers-rb/workers \
+  --version 0.1.0 \
+  --set sharedDirectory.existingClaim=tenants
+```
+
+Each release publishes the chart beside the Host image it installs, under one
+version, so the two never disagree about what is running. `--version` is what
+pins a cluster to one; without it Helm takes whatever is newest, which is not
+the same answer next month.
+
+No release has been cut yet, so there is nothing published to install. Until
+there is, the chart installs from a clone and has to be told which Host to
+run, because the one it would otherwise name has not been built:
+
+```sh
 helm install workers charts/workers \
+  --set image.tag=main \
   --set sharedDirectory.existingClaim=tenants
 ```
 

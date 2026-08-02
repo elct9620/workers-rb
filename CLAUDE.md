@@ -21,7 +21,8 @@ README's opening states what runs today.
 | `lib/workers/{node,databases,runtime}.rb` | Host configuration, read from the environment while the class body runs |
 | `compose.yaml` + `Caddyfile` | The cluster's shape: how many Nodes, what they share, what stands in front of them |
 | `charts/workers` | What a Kubernetes cluster runs, and which of it an operator supplies rather than the chart |
-| `.github/workflows/ci.yml` | What has to answer before an image reaches GHCR, and which refs get published |
+| `.github/workflows/ci.yml` | What has to answer before an image or a chart reaches GHCR, and which refs get published |
+| `release-please-config.json` | Where the version lives, and which files a release writes it into |
 | `tmp/*.md` | The exploration behind decisions SPEC.md only states. Not in version control |
 
 ## What the code does not say
@@ -57,7 +58,15 @@ one that test ever reads — `serving` points the Host instead.
 
 `e2e/` loads no Host. It speaks HTTP to a cluster `docker compose` is already
 running, and asserts only what no single process could show. `rake` does not
-run it; `rake e2e` does.
+run it; `rake e2e` does. Neither renders the chart; `rake chart:check` does,
+and it needs Helm rather than the guest binary.
+
+Every version in the tree is written by a release and never by hand. The
+`x-release-please-version` markers in `Chart.yaml` are what the release
+writes through, so a number edited around them is replaced by the next one,
+and a `Chart.yaml` rewritten through a path into the document would lose the
+comments that are most of what it says. Only a `feat:` or `fix:` commit opens
+a release at all.
 
 The publish job checks nothing out — Docker's reusable workflow builds from
 the Git context, so only committed files reach the image. The Hosts carry no
