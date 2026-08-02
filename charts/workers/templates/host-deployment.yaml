@@ -24,6 +24,13 @@ spec:
       labels:
         {{- include "workers.selectorLabels" . | nindent 8 }}
     spec:
+      # The image names its user by id, so the kubelet can refuse a Host that
+      # would answer requests as root instead of finding out it was one after
+      # the untrusted code was already running.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
       containers:
         - name: workers
           image: {{ include "workers.image" . }}

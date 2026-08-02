@@ -69,6 +69,7 @@ comments that are most of what it says. Only a `feat:` or `fix:` commit opens
 a release at all.
 
 The publish job checks nothing out — Docker's reusable workflow builds from
-the Git context, so only committed files reach the image. The Hosts carry no
-`runAsNonRoot`: the image's `USER` is a name rather than a UID, which the
-kubelet cannot verify, so asking for it stops the Pod instead of hardening it.
+the Git context, so only committed files reach the image. The image names its
+user by id, which is what lets the Hosts ask for `runAsNonRoot`: a name is
+what the kubelet cannot verify, and asking for it then stops the Pod instead
+of hardening it.
