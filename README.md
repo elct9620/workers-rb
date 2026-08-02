@@ -126,10 +126,13 @@ helm install workers charts/workers \
   --set sharedDirectory.existingClaim=tenants
 ```
 
-The shared directory has no default. Every Host reads the same one, and a
-volume only one of them can mount produces a cluster that disagrees about
-which Tenants exist without any Host reporting an error — so the install stops
-until a ReadWriteMany claim is named, or a class that can provision one.
+The shared directory is named rather than created, and has no default. Every
+Node has to read the same one — a volume only one Host can mount produces a
+cluster that disagrees about which Tenants exist without any Host reporting an
+error — so the install stops until a claim is named. The chart creates none,
+because how the volume is backed is also how Tenants get written into it, and
+a claim made here would arrive with no way to publish through: the Hosts mount
+it read-only, and something outside this release does the writing.
 
 The chart installs no Gateway. It creates the internal Service and prints the
 address to point a tunnel, reverse proxy, or load balancer at. Which Node

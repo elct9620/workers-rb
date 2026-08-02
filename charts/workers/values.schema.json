@@ -28,12 +28,10 @@
     },
     "sharedDirectory": {
       "type": "object",
-      "required": ["existingClaim", "storageClass", "size"],
+      "required": ["existingClaim"],
       "additionalProperties": false,
       "properties": {
-        "existingClaim": { "type": "string" },
-        "storageClass": { "type": "string" },
-        "size": { "type": "string", "pattern": "^[0-9]+(\\.[0-9]+)?(Ki|Mi|Gi|Ti|K|M|G|T)?$" }
+        "existingClaim": { "type": "string" }
       }
     },
     "databases": {

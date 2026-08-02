@@ -24,13 +24,13 @@ image:
 # Where Tenants are published. Every Host reads the same one, so a change made
 # through it reaches the next request on all of them.
 #
-# There is no default: a directory only one Host can read makes a cluster that
-# disagrees with itself about which Tenants exist, and it does so silently.
-# Supply an existing ReadWriteMany claim, or a class that can provision one.
+# The claim is the operator's: what backs it decides how Tenants get written
+# into it, and how many Nodes can mount it for reading is that same decision.
+# There is no default, because a directory only one Host can read makes a
+# cluster that disagrees with itself about which Tenants exist, and it does so
+# silently.
 sharedDirectory:
   existingClaim: ""
-  storageClass: ""
-  size: 1Gi
 
 databases:
   # False leaves the databases to a server this chart did not install, named by

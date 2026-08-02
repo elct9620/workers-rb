@@ -39,18 +39,18 @@ app.kubernetes.io/component: host
 {{- end -}}
 
 {{/*
-The claim every Host mounts at /app. An operator supplies a claim or a class
-that can provision one; neither is defaulted, because a shared directory only
-one Host can read produces a cluster that disagrees about which Tenants exist
-without any of them reporting an error.
+The claim every Host mounts at /app, read-only. The operator supplies it and
+this chart never creates one: how the volume is backed and how Tenants are
+written into it are one decision, and a claim made here would carry no way to
+publish through. It is not defaulted either, because a directory only one Host
+can read produces a cluster that disagrees about which Tenants exist without
+any of them reporting an error.
 */}}
 {{- define "workers.sharedClaim" -}}
 {{- if .Values.sharedDirectory.existingClaim -}}
 {{- .Values.sharedDirectory.existingClaim -}}
-{{- else if .Values.sharedDirectory.storageClass -}}
-{{- printf "%s-app" (include "workers.fullname" .) -}}
 {{- else -}}
-{{- fail "sharedDirectory needs either existingClaim or storageClass: every Host reads the same directory, and a ReadWriteMany volume is what lets them. Set sharedDirectory.existingClaim to a claim you already have, or sharedDirectory.storageClass to a class that can provision one." -}}
+{{- fail "sharedDirectory.existingClaim is needed: every Host reads the same directory, so name a claim every Node can mount for reading and whatever publishes Tenants can write to." -}}
 {{- end -}}
 {{- end -}}
 

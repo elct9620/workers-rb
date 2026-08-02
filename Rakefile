@@ -106,7 +106,6 @@ CHART_SHARED = "sharedDirectory.existingClaim=tenants"
 # and nowhere earlier.
 CHART_RENDERS = {
   "the install the README gives" => CHART_SHARED,
-  "a volume the cluster provisions rather than one it already has" => "sharedDirectory.storageClass=fast",
   "one Host, which is what makes `Env.node` say the same thing every time" => "#{CHART_SHARED},nodes=1",
   "a database server this chart did not install" =>
     "#{CHART_SHARED},databases.deploy=false,databases.url=http://sqld:8080,databases.adminUrl=http://sqld:8081"
@@ -117,6 +116,7 @@ CHART_RENDERS = {
 # runs rather than by a Pod that will not start.
 CHART_REFUSALS = {
   "a shared directory named by nothing" => "nodes=1",
+  "a shared directory this chart was asked to provision" => "sharedDirectory.storageClass=fast",
   "a database server named by nothing" => "#{CHART_SHARED},databases.deploy=false",
   "a server no Host could create a declared database on" =>
     "#{CHART_SHARED},databases.deploy=false,databases.url=http://sqld:8080"
