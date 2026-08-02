@@ -24,6 +24,27 @@ spec:
       labels:
         {{- include "workers.selectorLabels" . | nindent 8 }}
     spec:
+      # Replicas of one another are worth separating for the one thing they do
+      # not share: the machine under them. Kubernetes has no reason of its own
+      # to keep them apart, so several Hosts on one machine is an ordinary
+      # outcome — and it makes losing that machine cost the whole Service
+      # rather than a share of it.
+      #
+      # Preferred rather than required. More Hosts than machines is a way this
+      # is meant to run, and so is draining one of them: a Host that will not
+      # start unless it can start apart is a Host the Service does without at
+      # exactly the moment it has fewer machines to spread over. The count is
+      # taken one revision at a time, so the Pods a rolling update is still
+      # retiring do not decide where their own replacements go.
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              {{- include "workers.selectorLabels" . | nindent 14 }}
+          matchLabelKeys:
+            - pod-template-hash
       # The image names its user by id, so the kubelet can refuse a Host that
       # would answer requests as root instead of finding out it was one after
       # the untrusted code was already running.
