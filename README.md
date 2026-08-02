@@ -1,23 +1,15 @@
 # workers-rb
 
-A self-hostable, multi-tenant edge function platform: tenants publish Ruby by
+A self-hostable, multi-tenant edge function platform. Tenants publish Ruby by
 placing files in a shared directory, and the Host serves them from inside
-[kobako](https://github.com/elct9620/kobako)'s WASM/mruby sandbox.
+[kobako](https://github.com/elct9620/kobako)'s WASM/mruby sandbox — no
+filesystem, no network, and nothing of the Host but the Bindings it hands in.
 
 > [!WARNING]
-> This is a proof of concept, built to demonstrate the idea rather than to
-> carry anyone's traffic. There is no tenant authentication, no control-plane
-> API, and no quota, billing, or cross-tenant fairness — whoever can write to
-> the shared directory is a tenant. Do not run it in production.
+> A proof of concept: it demonstrates the idea rather than carrying anyone's
+> traffic. Run it on a cluster, but not one serving production.
 
-[SPEC.md](SPEC.md) is the target state. What runs today is a multi-node
-cluster — locally under `docker compose`, or on Kubernetes through
-`charts/workers-rb`: all three routing forms, per-tenant sandboxes, the Runtime
-Kit, and the `Env`, `DB`, `Time`, and `Random` Bindings. The nodes name one database
-server between them, so every node reads and writes every tenant's database
-and a write is there for the next request wherever it lands.
-
-## Running it
+## Try it
 
 ```sh
 bundle install
@@ -26,18 +18,13 @@ docker compose up -d --wait
 curl localhost:9292/hello       # WORKERS_PORT moves this off 9292
 ```
 
-Three Hosts sit behind one address, taking requests in turn, so consecutive
-calls report a different `Env.node`.
+Three Hosts sit behind one address. Call it twice and `Env.node` differs.
 
-Tenant code lives in `app/<tenant>/` — an `app.json` Manifest and one or more
-`*.rb` files, loaded in filename order. The directory is mounted into every
-node, so adding or editing a tenant reaches the next request without a restart
-and without visiting each one.
+## Publish a Worker
 
-A tenant answers at `/<tenant>`, at `<tenant>.<base>` once `WORKERS_BASE_DOMAIN`
-names the base, and at whatever `domain` its Manifest declares. The domain forms
-leave the whole path to the Worker; only the path form spends a segment naming
-the tenant.
+A Tenant is one directory under `app/`. Its directory name is its name, and an
+`app.json` Manifest is what makes it routable. The Worker is the constant your
+`*.rb` files define — `App`, unless the Manifest names another.
 
 ```ruby
 # app/hello/main.rb
@@ -46,14 +33,26 @@ App = ->(env) {
 }
 ```
 
-[`examples/`](examples) holds Tenants that run — this one, and one that puts
-the Bindings and the shared database on a page.
+`app/` is mounted into every node, so adding or editing a Tenant reaches the
+next request without a restart and without visiting each one.
 
-A Tenant that declares a database in its Manifest reaches it under the
-constant it named, and the Host has one made on first use.
+A Tenant answers at three addresses. For a request ending in `/x`:
+
+| Form | Address | `script_name` | `path` |
+|------|---------|---------------|--------|
+| Custom domain | `<the domain its app.json declares>/x` | `""` | `/x` |
+| Subdomain | `hello.<WORKERS_BASE_DOMAIN>/x` | `""` | `/x` |
+| Path | `/hello/x` | `/hello` | `/x` |
+
+Matched top to bottom. Only the path form spends a segment naming the Tenant.
+
+## Databases
+
+A Tenant declares a database in its Manifest and reaches it under the constant
+it named. The Host has one made on first use.
 
 ```json
-{ "bindings": { "db": { "DB::Main": "main" } } }
+{ "bindings": { "db": { "DB::Main": "visits" } } }
 ```
 
 ```ruby
@@ -62,93 +61,51 @@ DB::Main.query("select count(*) as n from visits")   # => [{ "n" => 3 }]
 ```
 
 Each database is named `<tenant>-<identifier>`, so no Tenant can name
-another's, and the Host has one made the first time a tenant reaches for one
-that is not there yet. `WORKERS_DB_URL` and `WORKERS_DB_ADMIN_URL` point the
-Host at the server holding them — the compose file runs one, and a Host
-started outside a container needs one to point at.
+another's. `WORKERS_DB_URL` and `WORKERS_DB_ADMIN_URL` point the Host at the
+server holding them, and `docker compose` runs one.
 
-Running this on Kubernetes is [`charts/workers-rb`](charts/workers-rb), which
-also sizes the database server for traffic that is not the demo's.
+## Deploy it
 
-## Testing
+<!-- x-release-please-start-version -->
+```sh
+helm install workers-rb oci://ghcr.io/elct9620/workers-rb \
+  --version 0.3.0 \
+  --set sharedDirectory.existingClaim=tenants
+```
+<!-- x-release-please-end -->
+
+Several Hosts read one shared claim, one database server they all name, and
+one internal Service to point a Gateway at. You supply the claim: the Hosts
+mount it read-only, so publishing into it happens outside the release.
+[`charts/workers-rb`](charts/workers-rb) has the rest.
+
+## What runs today
+
+All three routing forms, a Sandbox per Tenant, the Runtime Kit, and the `Env`,
+`DB`, `Time`, and `Random` Bindings. The nodes name one database server
+between them, so a write is there for the next request wherever it lands.
+[SPEC.md](SPEC.md) is the target state.
+
+## Where to look next
+
+| Path | What it holds |
+|------|---------------|
+| [SPEC.md](SPEC.md) | Every behavior, keyed `F-*` / `B-*` / `E-*` — what a Worker may reach, and what a failure costs |
+| [`examples/`](examples) | Tenants that run, written to be read |
+| [`charts/workers-rb`](charts/workers-rb) | Every value the chart takes, and how to size the database server |
+| [`compose.yaml`](compose.yaml) | The local cluster's shape |
+
+## Development
 
 ```sh
-bundle exec rake
+bundle exec rake        # the suite, against a real Host and a real database server
+bundle exec rake e2e    # against the cluster, once `docker compose up -d --wait` has it
+bundle exec puma        # one Host outside a container
 ```
 
-The suite fetches the binaries it needs — the guest one and a database server
-— and drives the real Host in process against both, so what the Binding is
-proved against is the server the cluster runs rather than a stand-in. The
-server starts on the first test that needs a database and is gone by the time
-the run is, whichever way the run ended.
-
-Running a Host outside a container works the same way, once something is
-listening where `WORKERS_DB_URL` says:
-
-```sh
-bundle exec puma
-```
-
-What one process cannot show — that every node serves the same tenants, that
-a write from any of them reaches the rest, that one address reaches them all
-— is checked against the running cluster instead:
-
-```sh
-docker compose up -d --wait
-bundle exec rake e2e
-```
-
-It publishes the tenants under `e2e/app/` into the shared directory and then
-speaks only HTTP, naming no node.
-
-## What tenant code can reach
-
-Nothing but what the Host hands it. The mruby guest has no filesystem,
-network, environment, or process. A Worker receives the request as a plain
-Hash the Host composed, so a field the Host left out has no name to call at
-all; the node it runs on, the databases it declared, the clock, and the
-entropy source arrive as Host
-objects that answer only the methods [SPEC.md](SPEC.md) lists for them.
-
-Every sandbox also carries the Runtime Kit — `Request` to read that Hash by
-name, and `Response` to shape a Rack triplet as text, as JSON, or with a
-chosen status. It runs inside the guest and grants nothing; a Worker that
-returns a triplet itself needs none of it.
-
-```ruby
-App = ->(env) {
-  req = Request.new(env)
-  Response.json({ "node" => Env.node, "path" => req.path })
-}
-```
-
-## What a failure costs
-
-One set of limits holds every tenant to the same bound; a Manifest does not
-move them.
-
-| Limit | Value | What the caller gets |
-|-------|-------|----------------------|
-| Wall clock per invocation | 5 seconds | 503, marked as a timeout |
-| Memory per invocation | 16 MiB | 503, marked as a memory limit |
-| Request body | 512 KiB | 413, before any Worker runs |
-
-Each Host holds the body limit itself, so a node reached directly is still a
-node that refuses an oversized body — and refuses it before reading it.
-Whatever stands in front of the cluster may refuse it earlier: the local
-cluster's proxy does, and a Gateway you supply is yours to say.
-
-A failure is one request's outcome. Tenant code that raises, loops forever, or
-returns something that is not a Rack triplet ends that request 5xx carrying
-its failure class, and beyond that nothing from outside the sandbox — no Host
-path, no environment, no internal address. The other tenants keep answering
-and the Host process keeps running. A failure that leaves the sandbox unusable
-has it discarded, and that tenant's next request builds a new one.
-
-Since nothing a Worker writes reaches the response, whatever it puts on
-standard output or error lands in the log of the node that ran it, named by
-the tenant it came from — which is the only thing a tenant author has to debug
-with:
+Nothing a Worker prints reaches the response. It lands in the log of the node
+that ran it, named by the Tenant it came from, which is what a Tenant author
+debugs with:
 
 ```sh
 docker compose logs node-a    # hello out: about to query

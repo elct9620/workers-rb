@@ -9,6 +9,14 @@
         {
           "type": "generic",
           "path": "charts/workers-rb/Chart.yaml"
+        },
+        {
+          "type": "generic",
+          "path": "README.md"
+        },
+        {
+          "type": "generic",
+          "path": "charts/workers-rb/README.md"
         }
       ]
     }

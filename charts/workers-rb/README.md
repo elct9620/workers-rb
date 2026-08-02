@@ -5,11 +5,13 @@ shared directory, one database server they all name, and one internal address.
 
 ## Install
 
+<!-- x-release-please-start-version -->
 ```sh
 helm install workers-rb oci://ghcr.io/elct9620/workers-rb \
-  --version 0.2.0 \
+  --version 0.3.0 \
   --set sharedDirectory.existingClaim=tenants
 ```
+<!-- x-release-please-end -->
 
 Each release publishes the chart under the repository's own reference and the
 Host's image under `workers-rb/host`, at one version, so the two never

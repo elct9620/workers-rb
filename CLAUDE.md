@@ -2,7 +2,7 @@
 
 A prototype platform hosting untrusted Ruby from many tenants in kobako's
 WASM/mruby sandbox. [SPEC.md](SPEC.md) is the target state and governs; the
-README's opening states what runs today.
+README's "What runs today" states what is built.
 
 ## Where decisions live
 
