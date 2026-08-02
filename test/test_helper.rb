@@ -42,6 +42,12 @@ module TestHelper
 
     private
 
+    # The superuser reads through any mode bits, so the boundary an unreadable
+    # directory draws does not exist for that user.
+    def skip_as_superuser
+      skip "the superuser reads an unreadable directory" if Process.uid.zero?
+    end
+
     # A shared directory holding one Tenant, served for the duration of the
     # block. Rack::Test settles its session on a test's first request, so the
     # Host is pointed here directly rather than through `app` — a later

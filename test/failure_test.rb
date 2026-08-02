@@ -164,12 +164,6 @@ class FailureTest < TestHelper::Case
 
   private
 
-  # The superuser reads through any mode bits, so the boundary an unreadable
-  # directory draws does not exist for that user.
-  def skip_as_superuser
-    skip "the superuser reads an unreadable directory" if Process.uid.zero?
-  end
-
   # The failure class is the whole of the first line, whatever a failure goes
   # on to say for itself after it.
   def assert_failure(status, name)

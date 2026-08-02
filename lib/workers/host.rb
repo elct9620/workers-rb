@@ -30,6 +30,19 @@ module Workers
     # before it is read rather than after a Tenant has been found for it.
     use BodyLimit
 
+    # The Host's own, answered on every hostname ahead of the routing: what an
+    # orchestrator asks about a Host is nothing a Tenant could answer for it,
+    # and a Tenant name carries no `_`, so taking these paths displaces none.
+    #
+    # Running is the whole of what liveness asks. Replacing a Host does not
+    # give it back a directory it cannot read, so readiness is what says that:
+    # it asks what this Host alone can be wrong about, which is why the
+    # database is not in it — every Host reaches the same one, and all of them
+    # standing down at once would leave the Tenants that declared no Binding
+    # with nowhere to be served.
+    get("/_health/live") { 200 }
+    get("/_health/ready") { Registry.readable?(settings.app_dir) ? 200 : 503 }
+
     # Tenants are resolved from the request, not from a route table, so every
     # method lands on the same handler.
     %i[get post put patch delete options].each do |verb|

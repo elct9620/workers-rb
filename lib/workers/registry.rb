@@ -82,8 +82,10 @@ module Workers
     end
     private_class_method :absent
 
+    # Whether this Host reaches the shared directory at all — the one question
+    # every Tenant's answer turns on, asked here so nothing else has to decide
+    # for itself what reaching it means.
     def self.readable?(root) = File.readable?(root) && File.executable?(root)
-    private_class_method :readable?
 
     def self.forget(dir)
       LOCK.synchronize { TENANTS.delete_if { |(cached, _), _| cached == dir } }
