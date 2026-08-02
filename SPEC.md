@@ -10,7 +10,7 @@ workers-rb builds a self-hostable, multi-tenant edge function platform on kobako
 
 | User | Goal |
 |------|------|
-| Platform operator | Deploy and run the cluster, publish a tenant by placing files, and observe which node served which request |
+| Platform operator | Deploy and run the cluster, publish a tenant by placing files, observe which node served which request, and tell whether a node is fit to be given requests |
 | Tenant author | Obtain a publicly reachable HTTP endpoint by placing `app.json` and `*.rb` in a shared directory — no packaging, image build, or deploy pipeline |
 | Technology evaluator | Judge whether Ruby can carry multi-tenant hosting of untrusted code, and see exactly where the isolation boundary lies and what it costs |
 
@@ -24,6 +24,7 @@ workers-rb builds a self-hostable, multi-tenant edge function platform on kobako
 | Node visibility | The same request to the same tenant reads a different `Env.node` on different nodes, while its Binding reads answer identically |
 | Failure containment | An exception, timeout, or memory exhaustion in tenant code affects only that request; the Host process and other tenants' requests are unaffected |
 | Rack compatibility | Tenant code returns a Rack response triplet, which the Host hands to the HTTP layer without semantic translation |
+| Fitness to serve | A Host that cannot reach the shared directory says so, and the requests it would have failed are given to a Host that can serve them, with nothing restarted |
 
 ### Success Criteria
 
@@ -35,6 +36,7 @@ workers-rb builds a self-hostable, multi-tenant edge function platform on kobako
 | Cross-node results agree | Across consecutive requests served by different nodes, `Env.node` differs while queries against the same Binding answer the same |
 | Writes work from every node | A request served by any node writes to its Binding successfully, and the write is visible to subsequent requests whichever node serves them |
 | Failures do not spread | While tenant code loops forever, that request ends 5xx and other tenants' requests keep responding normally |
+| An unfit Host is passed over | While one Node's shared directory is unreadable, that Host reports itself unfit while still reporting itself running, and the other Nodes answer the requests |
 
 ### Non-Goals
 
@@ -85,6 +87,7 @@ These roles constitute the system. Later layers use these names exclusively.
 - Narrow every Binding's guest-reachable method surface to an explicit allow list
 - Turn a Tenant's execution failure into an HTTP error response for that request
 - Record what an invocation wrote to its output streams, and what it could not reach or could not carry at once, where the operator reads
+- Answer, on paths belonging to the Host rather than to any Tenant, whether it is running and whether it is fit to be given requests
 
 **Does not:**
 
@@ -93,6 +96,7 @@ These roles constitute the system. Later layers use these names exclusively.
 - Define, create, or migrate a Tenant's database tables
 - Cache or rewrite the content of a tenant's HTTP response
 - Retain tenant execution state across requests
+- Answer for whether a Tenant's database, or anything else every Host shares, can be reached
 
 #### Interaction — input assumptions / output guarantees
 
@@ -127,6 +131,7 @@ These roles constitute the system. Later layers use these names exclusively.
 | F-06 | Runtime Kit |
 | F-07 | Failure containment and response mapping |
 | F-08 | Deployment topology |
+| F-09 | Health endpoints |
 
 ### User Journeys
 
@@ -159,6 +164,12 @@ These roles constitute the system. Later layers use these names exclusively.
 - **Context:** One Tenant's code contains an infinite loop
 - **Action:** Request that Tenant's endpoint and another Tenant's endpoint concurrently
 - **Outcome:** The former ends 5xx with a failure class once the timeout elapses, the latter responds normally, and the Host process keeps running
+
+#### J-06 — A platform operator loses one Node's shared directory
+
+- **Context:** Several Nodes serve one Tenant, and the mount on one of them stops being readable
+- **Action:** Keep sending requests to the cluster's external address
+- **Outcome:** That Host reports itself unfit and is passed over while it keeps running; the other Nodes answer, and it takes requests again once its mount returns, with nothing restarted
 
 ---
 
@@ -246,6 +257,16 @@ These roles constitute the system. Later layers use these names exclusively.
 | B-36 | The Host workload runs on several Nodes + a Tenant declares a Binding | Every Node reads and writes that Tenant's database |
 | B-37 | The Gateway points at the internal service | Requests to the external domain reach a Host on any Node |
 
+### F-09 — Health endpoints
+
+| ID | State + Operation | Result |
+|----|-------------------|--------|
+| B-43 | A request reaches the liveness path | 200, whatever the shared directory holds and whatever the Host's dependencies are doing: what it answers is that this process is running and answering requests |
+| B-44 | The shared directory is readable + a request reaches the readiness path | 200 |
+| B-45 | The shared directory is unreadable + a request reaches the readiness path | 503 per E-11, so the requests this Host would have failed are given to one that can serve them |
+| B-46 | A Binding's database is unreachable + a request reaches either path | Both answer as they would with every database reachable: every Host reaches the same database, so a Host reporting itself unfit for one it cannot reach would leave the Tenants that never declared a Binding with nowhere to be served |
+| B-47 | A request reaches either path under any Host header, including a domain a Manifest declares | Answered ahead of every routing form, so no Tenant is reached and no Tenant answers these paths |
+
 ### Error Scenarios
 
 | ID | Trigger | Response |
@@ -260,7 +281,7 @@ These roles constitute the system. Later layers use these names exclusively.
 | E-08 | Tenant code exceeds the timeout | 503 marked as a timeout |
 | E-09 | Tenant code exhausts the memory limit | 503 marked as a memory limit |
 | E-10 | Tenant code leaves a Binding failure unrescued — a method outside the allow list, or a statement that failed | 500 marked as a binding failure. The Host records what it could not reach, or that more was asked at once than could be carried; a statement the Tenant itself got wrong it records nothing about |
-| E-11 | The shared directory is unreadable | Every Tenant endpoint answers 503; a cached Sandbox does not serve while the directory is unreadable; the Host records what it could not read |
+| E-11 | The shared directory is unreadable | Every Tenant endpoint answers 503 and the readiness path answers 503 while the liveness path still answers 200; a cached Sandbox does not serve while the directory is unreadable; the Host records what it could not read |
 | E-12 | The Sandbox produces no recognisable result and its execution environment is corrupted | 503 marked as runtime corruption |
 | E-13 | A request carries a body larger than the Host will carry | 413. No Sandbox is reached and no Worker runs, and the Host reads no further than what tells it the body ran past the limit |
 
@@ -284,6 +305,8 @@ These roles constitute the system. Later layers use these names exclusively.
 | **invocation** | One entrypoint call the Host makes into a Sandbox, corresponding to exactly one HTTP request |
 | **failure class** | The category a failure response carries: compile failure, undefined entrypoint, tenant exception, invalid response, timeout, memory limit, binding failure, or runtime corruption |
 | **trap-class failure** | A failure that leaves the Sandbox unusable: the timeout, the memory limit, or runtime corruption |
+| **liveness** | Whether this Host is running. A Host that fails it is replaced, so what it asks about is only what starting a new Host would put right |
+| **readiness** | Whether this Host should be given requests. A Host that fails it is passed over while it keeps running, so what it asks about is what this Host alone can be wrong about |
 | **supply** | The Host's act of providing a Binding object for the span of one invocation. Every Binding a Sandbox declares is supplied before its Worker runs, so a call never reaches one that is not |
 
 ### Contracts
@@ -297,6 +320,15 @@ The operator supplies these to each Host as environment variables. They are clus
 | Base domain | The suffix under which `<tenant>.<base>` resolves per B-07 |
 | Shared directory | The mount path holding `/app/<tenant>/` |
 | Database address | Where this Host reaches a Tenant's databases |
+
+#### Health endpoints
+
+The Host answers two paths of its own, on every hostname and ahead of every routing form. A Tenant name carries no `_`, so no Tenant is reachable at either path and none is displaced by them. Both answer a GET, and the answer is its status code alone: the operator learns whether to send this Host requests, and anything reaching them from outside the cluster learns no more than that.
+
+| Path | Asks | 200 | 503 |
+|------|------|-----|-----|
+| `/_health/live` | Is this Host running? | Always | Never |
+| `/_health/ready` | Should this Host be given requests? | The shared directory is readable | The shared directory is unreadable |
 
 #### Manifest
 
@@ -448,4 +480,5 @@ A database is named `<tenant>-<database identifier>`. A database identifier carr
 | Any disagreement between the shared directory and cached Host state | The shared directory governs |
 | Any failure message returned to a tenant or outward | Carry at most the failure class and the tenant's own information |
 | Any failure the Host caused rather than the Tenant | Record it where the operator reads, naming what could not be reached, or that more was asked at once than could be carried. The response is unchanged: a failure class alone cannot say whose fault it was, and only the operator can act on the difference |
+| Any health this Host reports | Answer for what this Host alone can be wrong about. A dependency every Host shares is answered by the request that reaches for it failing, never by every Host at once declaring itself unfit to serve the Tenants that never needed it |
 | Any dependency the Host cannot reach | Stop reaching for it until it answers again, and tell the operator that once rather than for every request that follows. A Host that waits on it every time spends its capacity learning what it already knows, and denies the dependency whatever quiet it needs to recover |
