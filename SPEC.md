@@ -56,7 +56,7 @@ These roles constitute the system. Later layers use these names exclusively.
 | Role | Responsibility | Scope |
 |------|---------------|-------|
 | **Host** | The Ruby process running on each Node: accepts HTTP requests, resolves routes, loads tenants, supplies Bindings, and obtains responses | In scope |
-| **Tenant** | One application unit under the shared directory (`/app/<tenant>/`), consisting of a Manifest and mruby source | In scope |
+| **Tenant** | The unit of isolation: one directory under the shared directory (`/app/<tenant>/`) holding a Manifest and mruby source, served by its own Sandbox and reaching only the databases it declared | In scope |
 | **Manifest** | `/app/<tenant>/app.json` — declares the tenant's entrypoint, external domain form, and Bindings | In scope |
 | **Worker** | The entrypoint constant defined by a Tenant's mruby source; accepts the request environment and returns a Rack response triplet | In scope |
 | **Binding** | A named Host object supplied into the Sandbox — `Env`, `DB`, `Time`, or `Random` — and tenant code's only path outward | In scope |
@@ -295,7 +295,7 @@ These roles constitute the system. Later layers use these names exclusively.
 | Term | Meaning |
 |------|---------|
 | **Host** | The workers-rb process running on one Node. "Host" always names this process, never HTTP's Host header, which is written "Host header" throughout |
-| **Tenant** | One application unit under the shared directory, identified by its directory name |
+| **Tenant** | The unit of isolation, identified by its directory name under the shared directory: one Sandbox, only the databases it declared, and a failure boundary the other Tenants do not feel. Never names the code it runs, which is always the Worker |
 | **Manifest** | `/app/<tenant>/app.json` |
 | **Worker** | The callable that the entrypoint constant named by the Manifest refers to |
 | **request environment** | The Hash the Host composes from one request and passes as the Worker's only argument. Tenant code names it `env`; `Env`, capitalised, always names the Binding and never this Hash |
