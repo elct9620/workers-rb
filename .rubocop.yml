@@ -3,11 +3,13 @@ inherit_gem:
 
 AllCops:
   NewCops: enable
-  # Only the Host is ours to style. The guest binary is downloaded, and both
-  # `app/` and the fixtures under it are tenant code running on mruby.
+  # Only the Host is ours to style. The guest binary is downloaded, and
+  # everything below is tenant code running on mruby — styled for whoever
+  # reads it next, not for this Host's Ruby.
   Exclude:
     - vendor/**/*
     - app/**/*
+    - examples/**/*
     - e2e/app/**/*
     - test/fixtures/app/**/*
 

@@ -21,7 +21,7 @@ and a write is there for the next request wherever it lands.
 
 ```sh
 bundle install
-bundle exec rake dev:tenant     # writes a sample tenant into app/
+bundle exec rake dev:publish    # copies examples/ into app/
 docker compose up -d --wait
 curl localhost:9292/hello       # WORKERS_PORT moves this off 9292
 ```
@@ -42,9 +42,12 @@ the tenant.
 ```ruby
 # app/hello/main.rb
 App = ->(env) {
-  [200, { "content-type" => "text/plain" }, ["hello from #{env["path"]}\n"]]
+  [200, { "content-type" => "text/plain" }, ["hello from #{env["script_name"]}#{env["path"]}\n"]]
 }
 ```
+
+[`examples/`](examples) holds Tenants that run — this one, and one that puts
+the Bindings and the shared database on a page.
 
 A Tenant that declares a database in its Manifest reaches it under the
 constant it named, and the Host has one made on first use.

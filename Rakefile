@@ -58,33 +58,12 @@ namespace :sqld do
   task fetch: SQLD_BINARY
 end
 
-SAMPLE_MANIFEST = <<~'JSON'
-  { "bindings": { "db": { "DB::Main": "main" } } }
-JSON
-
-SAMPLE_TENANT = <<~'RUBY'
-  App = ->(env) {
-    req = Request.new(env)
-
-    DB::Main.execute("create table if not exists visits (at real)")
-    DB::Main.execute("insert into visits values (?)", Time.now)
-
-    Response.json({
-      "tenant" => Env.tenant,
-      "node" => Env.node,
-      "path" => req.path,
-      "visits" => DB::Main.query("select count(*) as n from visits")[0]["n"]
-    })
-  }
-RUBY
-
 namespace :dev do
-  desc "Write a sample tenant into the directory the Host serves"
-  task :tenant do
-    dir = File.join(ENV.fetch("WORKERS_APP_DIR", "app"), "hello")
-    mkdir_p dir
-    File.write(File.join(dir, "app.json"), SAMPLE_MANIFEST)
-    File.write(File.join(dir, "main.rb"), SAMPLE_TENANT)
+  desc "Publish the examples into the directory the Host serves"
+  task :publish do
+    dest = ENV.fetch("WORKERS_APP_DIR", "app")
+    mkdir_p dest
+    cp_r FileList["examples/*"].exclude("examples/README.md"), dest
   end
 end
 

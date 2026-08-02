@@ -19,6 +19,7 @@ README's opening states what runs today.
 | `lib/workers/manifest.rb` | What `app.json` may say, and what makes a Tenant unroutable |
 | `lib/workers/runtime_kit.rb` | The mruby source every Sandbox carries ahead of tenant files |
 | `lib/workers/{node,databases,runtime}.rb` | Host configuration, read from the environment while the class body runs |
+| `examples/` | What a Tenant looks like to whoever writes one. Published by `rake dev:publish`, asserted by nothing |
 | `compose.yaml` + `Caddyfile` | The cluster's shape: how many Nodes, what they share, what stands in front of them |
 | `charts/workers-rb` | What a Kubernetes cluster runs, and which of it an operator supplies rather than the chart |
 | `.github/workflows/ci.yml` | What has to answer before a branch's image reaches GHCR |
@@ -35,10 +36,10 @@ guest's mruby build will not hold is what a dispatch carrying one gets a
 corrupted runtime for rather than an error, and it is what sets the request
 body limit.
 
-Ruby under `app/`, `e2e/app/`, and `test/fixtures/app/` is tenant code running
-on mruby, not host Ruby. RuboCop excludes it, and its language is whatever the
-guest binary carries — the `+full` variant, so JSON and ASCII Regexp, and no
-more. `Response.json` takes a Hash positionally, so the braces are not
+Ruby under `app/`, `examples/`, `e2e/app/`, and `test/fixtures/app/` is tenant
+code running on mruby, not host Ruby. RuboCop excludes it, and its language is
+whatever the guest binary carries — the `+full` variant, so JSON and ASCII
+Regexp, and no more. `Response.json` takes a Hash positionally, so the braces are not
 optional.
 
 A Binding narrows its guest-reachable methods through `respond_to_guest?`, so

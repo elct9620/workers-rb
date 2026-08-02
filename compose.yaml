@@ -16,7 +16,7 @@ x-node: &node
   volumes:
     # Tenants are published by placing files, so the directory is mounted
     # rather than baked in: an edit here reaches the next request on every
-    # Node. `rake dev:tenant` writes a sample one.
+    # Node. `rake dev:publish` copies `examples/` in.
     - ./app:/app:ro
   depends_on:
     databases:
