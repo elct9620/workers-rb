@@ -86,6 +86,8 @@ CHART_SHARED = "sharedDirectory.existingClaim=tenants"
 CHART_RENDERS = {
   "the install the README gives" => CHART_SHARED,
   "one Host, which is what makes `Env.node` say the same thing every time" => "#{CHART_SHARED},nodes=1",
+  "a Host that drops what is still running rather than waiting for it" =>
+    "#{CHART_SHARED},shutdownTimeoutSeconds=0",
   "a database server this chart did not install" =>
     "#{CHART_SHARED},databases.deploy=false,databases.url=http://sqld:8080,databases.adminUrl=http://sqld:8081"
 }.freeze
@@ -96,6 +98,7 @@ CHART_RENDERS = {
 CHART_REFUSALS = {
   "a shared directory named by nothing" => "nodes=1",
   "a shared directory this chart was asked to provision" => "sharedDirectory.storageClass=fast",
+  "a Host whose stop has no end" => "#{CHART_SHARED},shutdownTimeoutSeconds=-1",
   "a database server named by nothing" => "#{CHART_SHARED},databases.deploy=false",
   "a server no Host could create a declared database on" =>
     "#{CHART_SHARED},databases.deploy=false,databases.url=http://sqld:8080"

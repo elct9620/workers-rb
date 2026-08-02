@@ -45,6 +45,7 @@ FROM base
 COPY --from=build ${BUNDLE_PATH} ${BUNDLE_PATH}
 COPY --from=guest /srv/workers/vendor vendor
 COPY Gemfile Gemfile.lock config.ru ./
+COPY config config
 COPY lib lib
 
 # The Host runs untrusted code, so it holds no more of the machine than it

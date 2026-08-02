@@ -12,6 +12,19 @@ nodes: 3
 # of which this names.
 baseDomain: workers.test
 
+# How long a request still running may hold up a Host that was told to stop.
+#
+# Left to itself the Host waits for it forever, which is right wherever a
+# request cannot outlive its own work. Here it can: the shared directory is a
+# mount, and one that stops answering leaves the request in a call no signal
+# reaches — so a Host that cannot finish stopping holds up the rolling update
+# it was stopped for, or the machine's own shutdown.
+#
+# Zero drops what is still running rather than waiting for it. Waiting without
+# end is what this chart does not offer, because a Kubernetes that has already
+# decided to stop this Host ends the wait with a kill either way.
+shutdownTimeoutSeconds: 10
+
 image:
   repository: ghcr.io/elct9620/workers-rb/host
   # Empty is the Host this chart was released with, which is what pinning the

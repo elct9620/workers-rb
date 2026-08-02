@@ -3,7 +3,7 @@
   "title": "workers",
   "description": "What an operator may say. A value outside these bounds is refused while `helm install` runs, rather than by a Pod that will not start. Which fields are needed depends on other fields, and the templates say so where they read them.",
   "type": "object",
-  "required": ["nodes", "baseDomain", "image", "sharedDirectory", "databases"],
+  "required": ["nodes", "baseDomain", "shutdownTimeoutSeconds", "image", "sharedDirectory", "databases"],
   "additionalProperties": false,
   "properties": {
     "nodes": {
@@ -15,6 +15,11 @@
       "type": "string",
       "minLength": 1,
       "description": "The suffix under which <tenant>.<base> reaches a Tenant."
+    },
+    "shutdownTimeoutSeconds": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "How long a request still running may hold up a Host that was told to stop. Zero drops it instead of waiting; a wait without end is not offered."
     },
     "image": {
       "type": "object",

@@ -41,6 +41,8 @@ spec:
           env:
             - name: WORKERS_BASE_DOMAIN
               value: {{ .Values.baseDomain | quote }}
+            - name: WORKERS_SHUTDOWN_TIMEOUT
+              value: {{ .Values.shutdownTimeoutSeconds | quote }}
             - name: WORKERS_DB_URL
               value: {{ include "workers.db.url" . | quote }}
             - name: WORKERS_DB_ADMIN_URL
