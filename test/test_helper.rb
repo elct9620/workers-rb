@@ -26,7 +26,10 @@ module TestHelper
       Workers::Host.set :runtime, Workers::Runtime.default
       # A database the Host gave up on stays given up on for as long as the
       # process lives, which is right for a Host and wrong for the next test.
+      # The reset takes back the configuration and not the failures already
+      # counted against a database, so the store holding them is replaced too.
       Stoplight.__stoplight__reset!
+      Stoplight.configure { |config| config.data_store = Stoplight::DataStore::Memory.new }
       @declared = []
     end
 
