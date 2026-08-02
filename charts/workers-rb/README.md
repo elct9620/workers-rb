@@ -8,7 +8,7 @@ shared directory, one database server they all name, and one internal address.
 <!-- x-release-please-start-version -->
 ```sh
 helm install workers-rb oci://ghcr.io/elct9620/workers-rb \
-  --version 0.3.0 \
+  --version 0.4.0 \
   --set sharedDirectory.existingClaim=tenants
 ```
 <!-- x-release-please-end -->
