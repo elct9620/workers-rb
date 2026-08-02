@@ -33,7 +33,7 @@ App = ->(env) {
 }
 ```
 
-`app/` is mounted into every node, so adding or editing a Tenant reaches the
+`app/` is mounted into every Node, so adding or editing a Tenant reaches the
 next request without a restart and without visiting each one.
 
 A Tenant answers at three addresses. For a request ending in `/x`:
@@ -82,7 +82,7 @@ mount it read-only, so publishing into it happens outside the release.
 ## What runs today
 
 All three routing forms, a Sandbox per Tenant, the Runtime Kit, and the `Env`,
-`DB`, `Time`, and `Random` Bindings. The nodes name one database server
+`DB`, `Time`, and `Random` Bindings. The Nodes name one database server
 between them, so a write is there for the next request wherever it lands.
 [SPEC.md](SPEC.md) is the target state.
 
@@ -103,7 +103,7 @@ bundle exec rake e2e    # against the cluster, once `docker compose up -d --wait
 bundle exec puma        # one Host outside a container
 ```
 
-Nothing a Worker prints reaches the response. It lands in the log of the node
+Nothing a Worker prints reaches the response. It lands in the log of the Node
 that ran it, named by the Tenant it came from, which is what a Tenant author
 debugs with:
 

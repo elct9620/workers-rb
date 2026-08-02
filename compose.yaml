@@ -36,7 +36,8 @@ services:
       # under load grows for that hour: SQLite finishes a checkpoint only
       # when no reader is holding the log, and a busy database never offers
       # that. This is short enough that the quiet between bursts is used.
-      # README says how to choose it for traffic that is not this demo's.
+      # charts/workers-rb/README.md says how to choose it for traffic that is
+      # not this demo's.
       SQLD_CHECKPOINT_INTERVAL_S: "30"
     volumes:
       - databases:/var/lib/sqld
