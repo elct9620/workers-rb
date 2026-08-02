@@ -47,28 +47,66 @@ spec:
               value: {{ include "workers.db.url" . | quote }}
             - name: WORKERS_DB_ADMIN_URL
               value: {{ include "workers.db.adminUrl" . | quote }}
+          # Held until the Host answers once, so the two probes below start
+          # counting against a Host that is serving rather than one still
+          # coming up. Nothing here waits a fixed delay: a Host slower than
+          # this budget is one that never answered, not one answered early.
+          #
+          # Asked of the liveness path, never readiness: a Host whose mount is
+          # unreadable is one that runs and reports itself unfit, and gating
+          # its start on readiness would kill it for saying so.
+          startupProbe:
+            httpGet:
+              path: /_health/live
+              port: http
+            periodSeconds: 5
+            failureThreshold: 6
           # Answered from the shared directory as this Host reads it, so a Pod
           # whose mount stopped answering leaves the Service while the rest
-          # keep serving. Nothing every Host shares is in it.
+          # keep serving. Nothing every Host shares is in it. Failing costs
+          # only the requests this Host would have failed anyway, so it is
+          # believed sooner than liveness is.
           readinessProbe:
             httpGet:
               path: /_health/ready
               port: http
             periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 2
           # Failing this replaces the Host, which hands the replacement the
-          # same mount — so it asks no more than that this one is answering.
+          # same mount — so it asks no more than that this one is answering,
+          # and asks for a minute before believing it is not. A Host serving
+          # every request from one bounded set of threads answers this late
+          # while those threads wait on a mount (E-14), and replacing it then
+          # takes capacity away from a cluster that has none to spare.
           livenessProbe:
             httpGet:
               path: /_health/live
               port: http
             periodSeconds: 10
-            failureThreshold: 3
+            timeoutSeconds: 3
+            failureThreshold: 6
+          # A Pod leaves the Service's endpoints and is told to stop at the
+          # same moment, and which of the two reaches a Gateway first is not
+          # ordered — so the Host keeps answering for long enough that the
+          # removal has travelled. Spelled as a command rather than the
+          # `sleep` field, which an API server below its feature gate accepts
+          # and drops, leaving a hook that runs nothing and says nothing.
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sh", "-c", "sleep 5"]
           volumeMounts:
             # Tenants are published by processes outside the Host, so a Host
             # holds no more of the directory than reading it needs.
             - name: app
               mountPath: /app
               readOnly: true
+      # What the stop is allowed to cost: the wait above, then the Host's own
+      # bounded stop, and room over both. Reaching the end of it is a kill,
+      # which is why the Host names a bound of its own rather than leaving the
+      # ending to this.
+      terminationGracePeriodSeconds: 30
       volumes:
         - name: app
           persistentVolumeClaim:
