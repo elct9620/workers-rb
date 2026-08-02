@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.3.0](https://github.com/elct9620/workers-rb/compare/v0.2.0...v0.3.0) (2026-08-02)
+
+
+### Features
+
+* bound how long a Host may take to stop ([aa23b9e](https://github.com/elct9620/workers-rb/commit/aa23b9eee515b1b48b81cd83c3dc7393ada02ecf))
+* **chart:** say what each workload costs the machine it runs on ([d65b632](https://github.com/elct9620/workers-rb/commit/d65b632ef540f55cbd8fe70e85f012191e4ae315))
+
+
+### Bug Fixes
+
+* answer the connections already waiting when a Host is told to stop ([2b9f169](https://github.com/elct9620/workers-rb/commit/2b9f169ef74aa00b9c4ad9363fde7b14e35c0ea8))
+* **chart:** drop the wait a Host kept before hearing it should stop ([2ad65dd](https://github.com/elct9620/workers-rb/commit/2ad65ddaf7b95f1d4ccf09e63b9f9b84bf4c0cb7))
+* **chart:** let a raised stop bound be the one that ends the stop ([38b15b8](https://github.com/elct9620/workers-rb/commit/38b15b87cadc7e5facf066d1b126a2e336c0b6c5))
+* **chart:** stop replacing a Host for a mount a replacement would inherit ([890e608](https://github.com/elct9620/workers-rb/commit/890e608d9efc08d6c9d4550fdbc2c719cb7cd53b))
+
 ## [0.2.0](https://github.com/elct9620/workers-rb/compare/v0.1.0...v0.2.0) (2026-08-02)
 
 
