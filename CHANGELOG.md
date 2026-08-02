@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.2.0](https://github.com/elct9620/workers-rb/compare/v0.1.0...v0.2.0) (2026-08-02)
+
+
+### ⚠ BREAKING CHANGES
+
+* the chart installs from oci://ghcr.io/elct9620/workers-rb and the Host image is ghcr.io/elct9620/workers-rb/host. Neither reference existed before this, and 0.1.0's are withdrawn.
+
+### Features
+
+* publish the chart as the repository, and the Host under it ([3dd83b3](https://github.com/elct9620/workers-rb/commit/3dd83b34cd81a0b6a0ae243a7ea13c6c8763a6d9))
+
 ## 0.1.0 (2026-08-02)
 
 
