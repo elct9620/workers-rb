@@ -1,13 +1,12 @@
 # What one process can prove, what only a running cluster can show, what a
-# cluster would be asked to install, and the image and chart that release
-# together — in that order, so nothing reaches the registry that the run has
-# not answered for.
+# cluster would be asked to install, and the image the branch is followed by —
+# in that order, so nothing reaches the registry that the run has not answered
+# for. What a release publishes is `release.yml`'s.
 name: CI
 
 on:
   push:
     branches: [ main ]
-    tags: [ "v*" ]
   pull_request:
 
 # A ref needs only its latest run; an earlier one is answering for code
@@ -70,8 +69,8 @@ jobs:
 
   # Nothing in the suite renders a template, so what an operator can ask this
   # chart for — and what it has to refuse — is answered here or in their
-  # cluster. Both publishes wait on it: the chart and the image it installs
-  # are one release.
+  # cluster. The image waits on it: the chart and the image it installs are
+  # one release, and this is where a release candidate answers for both.
   chart:
     name: Chart
     runs-on: ubuntu-latest
@@ -106,12 +105,11 @@ jobs:
       cache-mode: max
       set-meta-labels: true
       meta-images: ghcr.io/${{ github.repository }}
-      # `latest` and `main` follow the branch; a `v*` tag is what an
-      # operator pins a cluster to.
+      # `latest` and `main` follow the branch. The version an operator pins a
+      # cluster to is not here: it names a release, and a release is not a
+      # branch reaching the registry again.
       meta-tags: |
         type=ref,event=branch
-        type=semver,pattern={{version}}
-        type=semver,pattern={{major}}.{{minor}}
         type=sha
         type=raw,value=latest,enable={{is_default_branch}}
     secrets:
@@ -119,25 +117,3 @@ jobs:
         - registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
-  # Only a tag publishes a chart. `helm push` takes the tag it lands under
-  # from `Chart.yaml` and takes nothing else, so a version pushed twice
-  # replaces what an operator pinned — and the version moves when a release
-  # moves it, which is what a tag says happened. The chart lands beside the
-  # image it installs rather than in a namespace of its own.
-  publish-chart:
-    name: GHCR Chart
-    needs: [ lint, test, e2e, chart ]
-    if: startsWith(github.ref, 'refs/tags/v')
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
-      - env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: echo "$GITHUB_TOKEN" | helm registry login ghcr.io -u ${{ github.actor }} --password-stdin
-      - run: helm package charts/workers -d ${{ runner.temp }}
-      - run: helm push ${{ runner.temp }}/workers-*.tgz oci://ghcr.io/${{ github.repository }}

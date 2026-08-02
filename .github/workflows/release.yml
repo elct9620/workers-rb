@@ -1,0 +1,78 @@
+# What an operator pins a cluster to. release-please tags with the default
+# `GITHUB_TOKEN`, and Actions does not start a run from a `GITHUB_TOKEN`-
+# authored event, so a `v*` tag never triggers anything on its own — the
+# release chain calls this instead of a tag doing it. `workflow_dispatch` is
+# the same publish by hand, for a release whose chain did not finish.
+name: Publish
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: The release tag the image and the chart are published for
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: The release tag the image and the chart are published for
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  # What CI already built for this commit carries the branch's tags; this is
+  # the same source under the version an operator names. One platform per
+  # runner, so the native gem the sandbox depends on is compiled rather than
+  # emulated.
+  image:
+    name: GHCR
+    permissions:
+      contents: read
+      packages: write
+      # Provenance attestations and cache entries are signed with GitHub OIDC.
+      id-token: write
+    uses: docker/github-builder/.github/workflows/build.yml@27ade872c1e2296e62ef15ab3b10d37665e57cf7 # v1
+    with:
+      output: image
+      push: true
+      platforms: linux/amd64,linux/arm64
+      cache: true
+      cache-mode: max
+      set-meta-labels: true
+      meta-images: ghcr.io/${{ github.repository }}
+      # The run happens on the release commit rather than on the tag, so the
+      # version is named here instead of read from the ref.
+      meta-tags: |
+        type=semver,pattern={{version}},value=${{ inputs.tag }}
+        type=semver,pattern={{major}}.{{minor}},value=${{ inputs.tag }}
+    secrets:
+      registry-auths: |
+        - registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+  # `helm push` takes the tag it lands under from `Chart.yaml` and takes
+  # nothing else, so a version pushed twice replaces what an operator pinned.
+  # The chart lands beside the image it installs rather than in a namespace of
+  # its own, and after it: what `appVersion` names has to exist by the time
+  # anyone can install the chart that names it.
+  chart:
+    name: GHCR Chart
+    needs: image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ inputs.tag }}
+      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+      - env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "$GITHUB_TOKEN" | helm registry login ghcr.io -u ${{ github.actor }} --password-stdin
+      - run: helm package charts/workers -d ${{ runner.temp }}
+      - run: helm push ${{ runner.temp }}/workers-*.tgz oci://ghcr.io/${{ github.repository }}

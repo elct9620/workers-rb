@@ -21,7 +21,8 @@ README's opening states what runs today.
 | `lib/workers/{node,databases,runtime}.rb` | Host configuration, read from the environment while the class body runs |
 | `compose.yaml` + `Caddyfile` | The cluster's shape: how many Nodes, what they share, what stands in front of them |
 | `charts/workers` | What a Kubernetes cluster runs, and which of it an operator supplies rather than the chart |
-| `.github/workflows/ci.yml` | What has to answer before an image or a chart reaches GHCR, and which refs get published |
+| `.github/workflows/ci.yml` | What has to answer before a branch's image reaches GHCR |
+| `.github/workflows/release.yml` | What a version publishes, and who calls it — a `v*` tag starts nothing on its own |
 | `release-please-config.json` | Where the version lives, and which files a release writes it into |
 | `tmp/*.md` | The exploration behind decisions SPEC.md only states. Not in version control |
 

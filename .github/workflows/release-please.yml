@@ -1,7 +1,7 @@
 # What the next version is follows from the commits, not from whoever
 # remembers to raise it. This keeps a pull request open holding that version
 # and the changelog that goes with it; merging the request is what tags the
-# release, and the tag is what CI publishes the image and the chart under.
+# release, and the tag is what the image and the chart are published under.
 name: Release
 
 on:
@@ -28,8 +28,27 @@ jobs:
       # that tells the next run this one was already released.
       pull-requests: write
       issues: write
+    outputs:
+      released: ${{ steps.release.outputs.release_created }}
+      tag: ${{ steps.release.outputs.tag_name }}
     steps:
       # `release-please-config.json` and `.release-please-manifest.json` are
       # what this reads; the version it decides reaches `version.txt` and the
       # chart's `Chart.yaml` from there.
       - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5
+        id: release
+
+  # The tag this just wrote starts no run of its own — Actions does not act on
+  # what the default `GITHUB_TOKEN` authored — so what an operator installs is
+  # published by carrying on from here rather than by the tag being noticed.
+  publish:
+    needs: release-please
+    if: ${{ needs.release-please.outputs.released }}
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    uses: ./.github/workflows/release.yml
+    secrets: inherit
+    with:
+      tag: ${{ needs.release-please.outputs.tag }}
