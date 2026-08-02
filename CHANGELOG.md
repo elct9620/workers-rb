@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/elct9620/workers-rb/compare/v0.3.0...v0.4.0) (2026-08-02)
+
+
+### Features
+
+* **chart:** keep the Hosts off one machine while there is another ([07a456c](https://github.com/elct9620/workers-rb/commit/07a456c61c3924b31812f5524e5f647fb3758c07))
+
 ## [0.3.0](https://github.com/elct9620/workers-rb/compare/v0.2.0...v0.3.0) (2026-08-02)
 
 
