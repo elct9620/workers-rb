@@ -70,6 +70,8 @@ spec:
               port: hrana
             periodSeconds: 10
             failureThreshold: 3
+          resources:
+            {{- toYaml .Values.databases.resources | nindent 12 }}
           volumeMounts:
             - name: data
               mountPath: /var/lib/sqld

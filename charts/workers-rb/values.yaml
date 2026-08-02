@@ -25,6 +25,26 @@ baseDomain: workers.test
 # decided to stop this Host ends the wait with a kill either way.
 shutdownTimeoutSeconds: 10
 
+# What one Host costs the machine it runs on.
+#
+# The floor is the process and the compiled guest module, and a Host pays it
+# once however many Tenants it has cached: a Sandbox holds no interpreter
+# between invocations, so what grows under load is the number of requests in
+# flight, never the number of Tenants. The ceiling is that floor plus every
+# request running tenant code at its memory cap at once — five and 16 MiB
+# today, both of them the Host's settings rather than this chart's, so raising
+# either raises what belongs here.
+#
+# Memory has a limit because a Host past it takes the machine's other tenants
+# with it. CPU has none: a Host held back serves slowly, and one killed for
+# being busy serves nothing.
+resources:
+  requests:
+    cpu: 100m
+    memory: 160Mi
+  limits:
+    memory: 320Mi
+
 image:
   repository: ghcr.io/elct9620/workers-rb/host
   # Empty is the Host this chart was released with, which is what pinning the
@@ -53,6 +73,18 @@ databases:
   adminUrl: ""
 
   image: ghcr.io/tursodatabase/libsql-server:v0.24.32
+
+  # What the server costs. It answers statements against files it holds open,
+  # so what it needs follows how much is in flight and how much write-ahead log
+  # stands between checkpoints — not how many Tenants have declared a database.
+  # A limit for the same reason a Host has one, and no CPU limit for the same
+  # reason a Host has none.
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      memory: 256Mi
 
   # One server holds every Tenant's database, so this is where they all live.
   # Empty follows the cluster's default class — which decides whether a lost

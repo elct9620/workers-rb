@@ -96,6 +96,8 @@ spec:
             preStop:
               exec:
                 command: ["/bin/sh", "-c", "sleep 5"]
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
           volumeMounts:
             # Tenants are published by processes outside the Host, so a Host
             # holds no more of the directory than reading it needs.

@@ -88,6 +88,8 @@ CHART_RENDERS = {
   "one Host, which is what makes `Env.node` say the same thing every time" => "#{CHART_SHARED},nodes=1",
   "a Host that drops what is still running rather than waiting for it" =>
     "#{CHART_SHARED},shutdownTimeoutSeconds=0",
+  "machines an operator sized these workloads for rather than the defaults" =>
+    "#{CHART_SHARED},resources.limits.memory=512Mi,databases.resources.limits.memory=1Gi",
   "a database server this chart did not install" =>
     "#{CHART_SHARED},databases.deploy=false,databases.url=http://sqld:8080,databases.adminUrl=http://sqld:8081"
 }.freeze
