@@ -104,7 +104,10 @@ jobs:
       cache: true
       cache-mode: max
       set-meta-labels: true
-      meta-images: ghcr.io/${{ github.repository }}
+      # Under the repository rather than as it: the reference the repository's
+      # own name gives is the chart's, and a Host is one thing the chart
+      # installs rather than the thing an operator installs.
+      meta-images: ghcr.io/${{ github.repository }}/host
       # `latest` and `main` follow the branch. The version an operator pins a
       # cluster to is not here: it names a release, and a release is not a
       # branch reaching the registry again.

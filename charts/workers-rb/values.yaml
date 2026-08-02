@@ -13,7 +13,7 @@ nodes: 3
 baseDomain: workers.test
 
 image:
-  repository: ghcr.io/elct9620/workers-rb
+  repository: ghcr.io/elct9620/workers-rb/host
   # Empty is the Host this chart was released with, which is what pinning the
   # chart's version already pinned. Naming a tag here runs a different Host
   # than the release names, and is what makes `helm upgrade` roll the Pods —

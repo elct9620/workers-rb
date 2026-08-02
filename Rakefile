@@ -97,7 +97,7 @@ namespace :e2e do
   end
 end
 
-CHART = "charts/workers"
+CHART = "charts/workers-rb"
 CHART_SHARED = "sharedDirectory.existingClaim=tenants"
 
 # Every shape an operator can ask this chart for. Nothing here reaches a
@@ -130,13 +130,13 @@ namespace :chart do
     sh "helm", "lint", CHART, "--strict", "--set", CHART_SHARED
 
     CHART_RENDERS.each do |shape, values|
-      next if system("helm", "template", "workers", CHART, "--set", values, out: File::NULL)
+      next if system("helm", "template", "workers-rb", CHART, "--set", values, out: File::NULL)
 
       raise "#{CHART} could not render #{shape}"
     end
 
     CHART_REFUSALS.each do |shape, values|
-      next unless system("helm", "template", "workers", CHART, "--set", values,
+      next unless system("helm", "template", "workers-rb", CHART, "--set", values,
                          out: File::NULL, err: File::NULL)
 
       raise "#{CHART} rendered #{shape} instead of refusing it"

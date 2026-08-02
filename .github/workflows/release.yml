@@ -42,7 +42,7 @@ jobs:
       cache: true
       cache-mode: max
       set-meta-labels: true
-      meta-images: ghcr.io/${{ github.repository }}
+      meta-images: ghcr.io/${{ github.repository }}/host
       # The run happens on the release commit rather than on the tag, so the
       # version is named here instead of read from the ref.
       meta-tags: |
@@ -54,11 +54,12 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-  # `helm push` takes the tag it lands under from `Chart.yaml` and takes
-  # nothing else, so a version pushed twice replaces what an operator pinned.
-  # The chart lands beside the image it installs rather than in a namespace of
-  # its own, and after it: what `appVersion` names has to exist by the time
-  # anyone can install the chart that names it.
+  # `helm push` takes both the name it lands under and the tag from
+  # `Chart.yaml` and takes nothing else, so the chart takes the repository's
+  # own reference and the Host's image sits under it. A version pushed twice
+  # replaces what an operator pinned. Pushed after the image, because what
+  # `appVersion` names has to exist by the time anyone can install the chart
+  # that names it.
   chart:
     name: GHCR Chart
     needs: image
@@ -74,5 +75,5 @@ jobs:
       - env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: echo "$GITHUB_TOKEN" | helm registry login ghcr.io -u ${{ github.actor }} --password-stdin
-      - run: helm package charts/workers -d ${{ runner.temp }}
-      - run: helm push ${{ runner.temp }}/workers-*.tgz oci://ghcr.io/${{ github.repository }}
+      - run: helm package charts/workers-rb -d ${{ runner.temp }}
+      - run: helm push ${{ runner.temp }}/workers-rb-*.tgz oci://ghcr.io/${{ github.repository_owner }}

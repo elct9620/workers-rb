@@ -12,7 +12,7 @@ placing files in a shared directory, and the Host serves them from inside
 
 [SPEC.md](SPEC.md) is the target state. What runs today is a multi-node
 cluster — locally under `docker compose`, or on Kubernetes through
-`charts/workers`: all three routing forms, per-tenant sandboxes, the Runtime
+`charts/workers-rb`: all three routing forms, per-tenant sandboxes, the Runtime
 Kit, and the `Env`, `DB`, `Time`, and `Random` Bindings. The nodes name one database
 server between them, so every node reads and writes every tenant's database
 and a write is there for the next request wherever it lands.
@@ -102,26 +102,29 @@ writes was back to zero within 30 seconds of the writes stopping.
 
 ## Deploying to a cluster
 
-`charts/workers` asks Kubernetes for the same shape: several Hosts reading one
-shared directory, one database server they all name, and one internal address.
+`charts/workers-rb` asks Kubernetes for the same shape: several Hosts reading
+one shared directory, one database server they all name, and one internal
+address.
 
 ```sh
-helm install workers oci://ghcr.io/elct9620/workers-rb/workers \
-  --version 0.1.0 \
+helm install workers-rb oci://ghcr.io/elct9620/workers-rb \
+  --version 0.2.0 \
   --set sharedDirectory.existingClaim=tenants
 ```
 
-Each release publishes the chart beside the Host image it installs, under one
-version, so the two never disagree about what is running. `--version` is what
-pins a cluster to one; without it Helm takes whatever is newest, which is not
-the same answer next month.
+Each release publishes the chart under the repository's own reference and the
+Host's image under `workers-rb/host`, at one version, so the two never
+disagree about what is running — installing the chart is what names the Host,
+and nothing has to be told which image goes with it. `--version` is what pins
+a cluster to one; without it Helm takes whatever is newest, which is not the
+same answer next month.
 
-No release has been cut yet, so there is nothing published to install. Until
-there is, the chart installs from a clone and has to be told which Host to
-run, because the one it would otherwise name has not been built:
+A change that has not been released yet installs from a clone, and has to be
+told which Host to run because the one it would otherwise name does not exist
+under that version:
 
 ```sh
-helm install workers charts/workers \
+helm install workers-rb charts/workers-rb \
   --set image.tag=main \
   --set sharedDirectory.existingClaim=tenants
 ```

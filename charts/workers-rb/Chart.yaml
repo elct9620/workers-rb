@@ -1,5 +1,8 @@
 apiVersion: v2
-name: workers
+# What the chart is published as, and the last segment of the OCI reference an
+# operator installs from. The Host's image is a name under that reference
+# rather than the reference itself, so neither has to be read as the other.
+name: workers-rb
 description: A multi-tenant edge function platform serving untrusted Ruby from a shared directory
 type: application
 

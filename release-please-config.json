@@ -4,10 +4,11 @@
   "packages": {
     ".": {
       "release-type": "simple",
+      "bump-minor-pre-major": true,
       "extra-files": [
         {
           "type": "generic",
-          "path": "charts/workers/Chart.yaml"
+          "path": "charts/workers-rb/Chart.yaml"
         }
       ]
     }

@@ -20,7 +20,7 @@ README's opening states what runs today.
 | `lib/workers/runtime_kit.rb` | The mruby source every Sandbox carries ahead of tenant files |
 | `lib/workers/{node,databases,runtime}.rb` | Host configuration, read from the environment while the class body runs |
 | `compose.yaml` + `Caddyfile` | The cluster's shape: how many Nodes, what they share, what stands in front of them |
-| `charts/workers` | What a Kubernetes cluster runs, and which of it an operator supplies rather than the chart |
+| `charts/workers-rb` | What a Kubernetes cluster runs, and which of it an operator supplies rather than the chart |
 | `.github/workflows/ci.yml` | What has to answer before a branch's image reaches GHCR |
 | `.github/workflows/release.yml` | What a version publishes, and who calls it — a `v*` tag starts nothing on its own |
 | `release-please-config.json` | Where the version lives, and which files a release writes it into |
