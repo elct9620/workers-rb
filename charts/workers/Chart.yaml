@@ -16,3 +16,9 @@ appVersion: "0.0.0" # x-release-please-version
 home: https://github.com/elct9620/workers-rb
 sources:
   - https://github.com/elct9620/workers-rb
+
+# What ties the published chart to this repository. A package that carries it
+# takes the repository's visibility, rather than landing private and waiting
+# for someone to open it by hand.
+annotations:
+  org.opencontainers.image.source: https://github.com/elct9620/workers-rb

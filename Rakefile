@@ -97,6 +97,53 @@ namespace :e2e do
   end
 end
 
+CHART = "charts/workers"
+CHART_SHARED = "sharedDirectory.existingClaim=tenants"
+
+# Every shape an operator can ask this chart for. Nothing here reaches a
+# cluster: what is checked is that the chart has an answer for each, because
+# a template that only ever rendered one of them would say so in a cluster
+# and nowhere earlier.
+CHART_RENDERS = {
+  "the install the README gives" => CHART_SHARED,
+  "a volume the cluster provisions rather than one it already has" => "sharedDirectory.storageClass=fast",
+  "one Host, which is what makes `Env.node` say the same thing every time" => "#{CHART_SHARED},nodes=1",
+  "a database server this chart did not install" =>
+    "#{CHART_SHARED},databases.deploy=false,databases.url=http://sqld:8080,databases.adminUrl=http://sqld:8081"
+}.freeze
+
+# What the chart has to turn away. Each of these leaves a cluster that fails
+# silently or disagrees with itself, so it is refused while `helm install`
+# runs rather than by a Pod that will not start.
+CHART_REFUSALS = {
+  "a shared directory named by nothing" => "nodes=1",
+  "a database server named by nothing" => "#{CHART_SHARED},databases.deploy=false",
+  "a server no Host could create a declared database on" =>
+    "#{CHART_SHARED},databases.deploy=false,databases.url=http://sqld:8080"
+}.freeze
+
+# Out of the default task for the same reason `e2e` is: `rake` needs Ruby and
+# the guest binary, this needs Helm.
+namespace :chart do
+  desc "Render every shape an operator can ask the chart for, and every one it must refuse"
+  task :check do
+    sh "helm", "lint", CHART, "--strict", "--set", CHART_SHARED
+
+    CHART_RENDERS.each do |shape, values|
+      next if system("helm", "template", "workers", CHART, "--set", values, out: File::NULL)
+
+      raise "#{CHART} could not render #{shape}"
+    end
+
+    CHART_REFUSALS.each do |shape, values|
+      next unless system("helm", "template", "workers", CHART, "--set", values,
+                         out: File::NULL, err: File::NULL)
+
+      raise "#{CHART} rendered #{shape} instead of refusing it"
+    end
+  end
+end
+
 Rake::TestTask.new do |task|
   task.libs << "lib" << "test"
   task.test_files = FileList["test/**/*_test.rb"]

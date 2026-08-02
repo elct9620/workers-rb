@@ -1,6 +1,7 @@
-# What one process can prove, what only a running cluster can show, and the
-# image that cluster runs — in that order, so nothing reaches the registry
-# that the suite has not answered for.
+# What one process can prove, what only a running cluster can show, what a
+# cluster would be asked to install, and the image and chart that release
+# together — in that order, so nothing reaches the registry that the run has
+# not answered for.
 name: CI
 
 on:
@@ -67,6 +68,22 @@ jobs:
       - if: failure()
         run: docker compose logs
 
+  # Nothing in the suite renders a template, so what an operator can ask this
+  # chart for — and what it has to refuse — is answered here or in their
+  # cluster. Both publishes wait on it: the chart and the image it installs
+  # are one release.
+  chart:
+    name: Chart
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b # v1
+        with:
+          ruby-version: .ruby-version
+          bundler-cache: true
+      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+      - run: bundle exec rake chart:check
+
   # One platform per runner, so the native gem the sandbox depends on is
   # compiled rather than emulated — under emulation that compile is what the
   # whole job waits on. Docker's workflow distributes the builds, pushes each
@@ -74,7 +91,7 @@ jobs:
   # builds without pushing, which is what proves the Dockerfile still builds.
   publish:
     name: GHCR
-    needs: [ lint, test, e2e ]
+    needs: [ lint, test, e2e, chart ]
     permissions:
       contents: read
       packages: write
@@ -102,3 +119,25 @@ jobs:
         - registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
+  # Only a tag publishes a chart. `helm push` takes the tag it lands under
+  # from `Chart.yaml` and takes nothing else, so a version pushed twice
+  # replaces what an operator pinned — and the version moves when a release
+  # moves it, which is what a tag says happened. The chart lands beside the
+  # image it installs rather than in a namespace of its own.
+  publish-chart:
+    name: GHCR Chart
+    needs: [ lint, test, e2e, chart ]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+      - env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "$GITHUB_TOKEN" | helm registry login ghcr.io -u ${{ github.actor }} --password-stdin
+      - run: helm package charts/workers -d ${{ runner.temp }}
+      - run: helm push ${{ runner.temp }}/workers-*.tgz oci://ghcr.io/${{ github.repository }}
