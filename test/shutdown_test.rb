@@ -34,16 +34,26 @@ class ShutdownTest < TestHelper::Case
     assert_raises(ArgumentError) { bound("soon") }
   end
 
+  # Puma drops what is waiting to be accepted unless told otherwise, and a
+  # connection dropped there is a reset rather than a response.
+  def test_connections_already_waiting_are_answered_rather_than_reset
+    assert_equal true, options[:drain_on_shutdown]
+  end
+
   private
 
-  def bound(setting)
+  def bound(setting) = options(setting)[:force_shutdown_after]
+
+  # The configuration the server would read, with the environment it would
+  # read it in, and the environment left as it was found.
+  def options(setting = nil)
     was = ENV.fetch(SETTING, nil)
     setting.nil? ? ENV.delete(SETTING) : ENV[SETTING] = setting
 
     config = Puma::Configuration.new(config_files: [ CONFIG ])
     config.load
     config.clamp
-    config.options[:force_shutdown_after]
+    config.options
   ensure
     was.nil? ? ENV.delete(SETTING) : ENV[SETTING] = was
   end
