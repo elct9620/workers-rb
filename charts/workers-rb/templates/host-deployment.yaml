@@ -105,10 +105,14 @@ spec:
               mountPath: /app
               readOnly: true
       # What the stop is allowed to cost: the wait above, then the Host's own
-      # bounded stop, and room over both. Reaching the end of it is a kill,
-      # which is why the Host names a bound of its own rather than leaving the
-      # ending to this.
-      terminationGracePeriodSeconds: 30
+      # bounded stop — the bound it was given, the grace Puma spends over it,
+      # and the moment it takes to let go — and room past all of them.
+      #
+      # Derived rather than fixed, because reaching the end of this is a kill:
+      # a bound raised past a fixed one would be ended by the kill instead of
+      # honoured, and the operator who raised it would not be told. Nothing
+      # raised leaves this at the 30 seconds Kubernetes would have given.
+      terminationGracePeriodSeconds: {{ add .Values.shutdownTimeoutSeconds 20 }}
       volumes:
         - name: app
           persistentVolumeClaim:
