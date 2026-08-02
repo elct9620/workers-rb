@@ -3,13 +3,15 @@ name: workers
 description: A multi-tenant edge function platform serving untrusted Ruby from a shared directory
 type: application
 
-# The chart's own version. It moves when the shape of the cluster moves, which
-# is not when the Host does.
-version: 0.1.0
+# The chart and the Host it installs are released together, so these two are
+# one version, raised by the commits since the last release rather than by
+# hand. The markers are where that release puts the new number.
+version: 0.0.0 # x-release-please-version
 
-# What `image.tag` defaults to. This prototype publishes no release yet, so the
-# default follows `main` and an operator who wants a fixed one sets `image.tag`.
-appVersion: "main"
+# What `image.tag` defaults to, so an install pulls the Host this chart was
+# released with. `0.0.0` names no published image; the first release is what
+# gives it one.
+appVersion: "0.0.0" # x-release-please-version
 
 home: https://github.com/elct9620/workers-rb
 sources:

@@ -1,0 +1,35 @@
+# What the next version is follows from the commits, not from whoever
+# remembers to raise it. This keeps a pull request open holding that version
+# and the changelog that goes with it; merging the request is what tags the
+# release, and the tag is what CI publishes the image and the chart under.
+name: Release
+
+on:
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+# Two pushes landing together would otherwise each decide what the next
+# version is without seeing the other's answer. An earlier run is left to
+# finish rather than cancelled — it may already be tagging.
+concurrency:
+  group: ${{ github.workflow }}
+
+jobs:
+  release-please:
+    name: Release Please
+    runs-on: ubuntu-latest
+    permissions:
+      # The release commit and the tag it carries.
+      contents: write
+      # The pull request that holds them until it is merged, and the label
+      # that tells the next run this one was already released.
+      pull-requests: write
+      issues: write
+    steps:
+      # `release-please-config.json` and `.release-please-manifest.json` are
+      # what this reads; the version it decides reaches `version.txt` and the
+      # chart's `Chart.yaml` from there.
+      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5

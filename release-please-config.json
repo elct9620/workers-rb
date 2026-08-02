@@ -1,0 +1,12 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "bootstrap-sha": "3cb8526bd74429cd1daba4bba31ff2161a897b2c",
+  "packages": {
+    ".": {
+      "release-type": "simple",
+      "extra-files": [
+        "charts/workers/Chart.yaml"
+      ]
+    }
+  }
+}
