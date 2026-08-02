@@ -38,17 +38,19 @@ spec:
               value: {{ include "workers.db.url" . | quote }}
             - name: WORKERS_DB_ADMIN_URL
               value: {{ include "workers.db.adminUrl" . | quote }}
-          # A Host that is up answers a path matching no Tenant with a 404,
-          # which an HTTP probe reads as a failure and would restart every Pod
-          # of a cluster serving no Tenants yet. What says this Host can take a
-          # request is that it is listening: the shared directory is read when
-          # the first request asks for a Tenant, not before.
+          # Answered from the shared directory as this Host reads it, so a Pod
+          # whose mount stopped answering leaves the Service while the rest
+          # keep serving. Nothing every Host shares is in it.
           readinessProbe:
-            tcpSocket:
+            httpGet:
+              path: /_health/ready
               port: http
             periodSeconds: 5
+          # Failing this replaces the Host, which hands the replacement the
+          # same mount — so it asks no more than that this one is answering.
           livenessProbe:
-            tcpSocket:
+            httpGet:
+              path: /_health/live
               port: http
             periodSeconds: 10
             failureThreshold: 3

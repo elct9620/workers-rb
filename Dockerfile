@@ -37,10 +37,11 @@ COPY lib lib
 RUN useradd --create-home --shell /usr/sbin/nologin workers
 USER workers
 
-# Answering at all is the signal — a path matching no Tenant is a 404 from a
-# Host that is up.
+# What Compose holds back the Gateway for is a Node that can serve, which is
+# the Host's own answer rather than the fact that it answered: a Host that
+# cannot read the shared directory replies here, and replies 503.
 HEALTHCHECK --interval=5s --timeout=3s --start-period=15s --retries=5 \
-  CMD ["ruby", "-rnet/http", "-e", "Net::HTTP.get_response(URI('http://127.0.0.1:9292/'))"]
+  CMD ["ruby", "-rnet/http", "-e", "exit Net::HTTP.get_response(URI('http://127.0.0.1:9292/_health/ready')).code == '200'"]
 
 EXPOSE 9292
 CMD ["bundle", "exec", "puma", "-b", "tcp://0.0.0.0:9292"]
