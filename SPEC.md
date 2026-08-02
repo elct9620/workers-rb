@@ -24,7 +24,7 @@ workers-rb builds a self-hostable, multi-tenant edge function platform on kobako
 | Node visibility | The same request to the same tenant reads a different `Env.node` on different nodes, while its Binding reads answer identically |
 | Failure containment | An exception, timeout, or memory exhaustion in tenant code affects only that request; the Host process and other tenants' requests are unaffected |
 | Rack compatibility | Tenant code returns a Rack response triplet, which the Host hands to the HTTP layer without semantic translation |
-| Fitness to serve | A Host that cannot reach the shared directory says so, and the requests it would have failed are given to a Host that can serve them, with nothing restarted |
+| Fitness to serve | A Host not reaching the shared directory stops being given requests, and the ones it would have failed are given to a Host that can serve them, with nothing restarted |
 
 ### Success Criteria
 
@@ -36,7 +36,7 @@ workers-rb builds a self-hostable, multi-tenant edge function platform on kobako
 | Cross-node results agree | Across consecutive requests served by different nodes, `Env.node` differs while queries against the same Binding answer the same |
 | Writes work from every node | A request served by any node writes to its Binding successfully, and the write is visible to subsequent requests whichever node serves them |
 | Failures do not spread | While tenant code loops forever, that request ends 5xx and other tenants' requests keep responding normally |
-| An unfit Host is passed over | While one Node's shared directory is unreadable, that Host reports itself unfit while still reporting itself running, and the other Nodes answer the requests |
+| An unfit Host is passed over | While one Node's shared directory answers unreadable, that Host reports itself unfit while still reporting itself running, and the other Nodes answer the requests |
 
 ### Non-Goals
 
@@ -167,7 +167,7 @@ These roles constitute the system. Later layers use these names exclusively.
 
 #### J-06 — A platform operator loses one Node's shared directory
 
-- **Context:** Several Nodes serve one Tenant, and the mount on one of them stops being readable
+- **Context:** Several Nodes serve one Tenant, and the mount on one of them answers unreadable
 - **Action:** Keep sending requests to the cluster's external address
 - **Outcome:** That Host reports itself unfit and is passed over while it keeps running; the other Nodes answer, and it takes requests again once its mount returns, with nothing restarted
 
@@ -261,9 +261,9 @@ These roles constitute the system. Later layers use these names exclusively.
 
 | ID | State + Operation | Result |
 |----|-------------------|--------|
-| B-43 | A request reaches the liveness path | 200, whatever the shared directory holds and whatever the Host's dependencies are doing: what it answers is that this process is running and answering requests |
-| B-44 | The shared directory is readable + a request reaches the readiness path | 200 |
-| B-45 | The shared directory is unreadable + a request reaches the readiness path | 503 per E-11, so the requests this Host would have failed are given to one that can serve them |
+| B-43 | A request reaches the liveness path | 200 whenever the Host answers, whatever the shared directory holds and whatever the Host's dependencies are doing: what it answers is that this process is running and answering requests. Whether it answers at all is E-14's |
+| B-44 | The shared directory answers readable + a request reaches the readiness path | 200 |
+| B-45 | The shared directory answers unreadable + a request reaches the readiness path | 503 per E-11, so the requests this Host would have failed are given to one that can serve them |
 | B-46 | A Binding's database is unreachable + a request reaches either path | Both answer as they would with every database reachable: every Host reaches the same database, so a Host reporting itself unfit for one it cannot reach would leave the Tenants that never declared a Binding with nowhere to be served |
 | B-47 | A request reaches either path under any Host header, including a domain a Manifest declares | Answered ahead of every routing form, so no Tenant is reached and no Tenant answers these paths |
 
@@ -281,9 +281,10 @@ These roles constitute the system. Later layers use these names exclusively.
 | E-08 | Tenant code exceeds the timeout | 503 marked as a timeout |
 | E-09 | Tenant code exhausts the memory limit | 503 marked as a memory limit |
 | E-10 | Tenant code leaves a Binding failure unrescued — a method outside the allow list, or a statement that failed | 500 marked as a binding failure. The Host records what it could not reach, or that more was asked at once than could be carried; a statement the Tenant itself got wrong it records nothing about |
-| E-11 | The shared directory is unreadable | Every Tenant endpoint answers 503 and the readiness path answers 503 while the liveness path still answers 200; a cached Sandbox does not serve while the directory is unreadable; the Host records what it could not read |
+| E-11 | The shared directory answers unreadable | Every Tenant endpoint answers 503 and the readiness path answers 503 while the liveness path still answers 200; a cached Sandbox does not serve while the directory is unreadable; the Host records what it could not read |
 | E-12 | The Sandbox produces no recognisable result and its execution environment is corrupted | 503 marked as runtime corruption |
 | E-13 | A request carries a body larger than the Host will carry | 413. No Sandbox is reached and no Worker runs, and the Host reads no further than what tells it the body ran past the limit |
+| E-14 | The shared directory stops answering rather than answering unreadable | The Host has no result to report: a request that reaches for it does not complete while the mount does not answer, and the readiness path is one such request. While requests waiting on the mount fill what this Host serves at once, neither health path is answered at all. What returns this Host to service is the mount answering again — a replacement Host reaches the same mount |
 
 ---
 
@@ -327,8 +328,8 @@ The Host answers two paths of its own, on every hostname and ahead of every rout
 
 | Path | Asks | 200 | 503 |
 |------|------|-----|-----|
-| `/_health/live` | Is this Host running? | Always | Never |
-| `/_health/ready` | Should this Host be given requests? | The shared directory is readable | The shared directory is unreadable |
+| `/_health/live` | Is this Host running? | Whenever it answers | Never |
+| `/_health/ready` | Should this Host be given requests? | The shared directory answers readable | The shared directory answers unreadable |
 
 #### Manifest
 
