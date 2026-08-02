@@ -5,7 +5,10 @@
     ".": {
       "release-type": "simple",
       "extra-files": [
-        "charts/workers/Chart.yaml"
+        {
+          "type": "generic",
+          "path": "charts/workers/Chart.yaml"
+        }
       ]
     }
   }
