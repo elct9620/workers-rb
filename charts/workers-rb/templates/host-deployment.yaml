@@ -86,16 +86,6 @@ spec:
             periodSeconds: 10
             timeoutSeconds: 3
             failureThreshold: 6
-          # A Pod leaves the Service's endpoints and is told to stop at the
-          # same moment, and which of the two reaches a Gateway first is not
-          # ordered — so the Host keeps answering for long enough that the
-          # removal has travelled. Spelled as a command rather than the
-          # `sleep` field, which an API server below its feature gate accepts
-          # and drops, leaving a hook that runs nothing and says nothing.
-          lifecycle:
-            preStop:
-              exec:
-                command: ["/bin/sh", "-c", "sleep 5"]
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           volumeMounts:
@@ -104,9 +94,9 @@ spec:
             - name: app
               mountPath: /app
               readOnly: true
-      # What the stop is allowed to cost: the wait above, then the Host's own
-      # bounded stop — the bound it was given, the grace Puma spends over it,
-      # and the moment it takes to let go — and room past all of them.
+      # What the stop is allowed to cost: the bound the Host was given, the
+      # grace Puma spends over it, the moment it takes to let go, and room
+      # past all three.
       #
       # Derived rather than fixed, because reaching the end of this is a kill:
       # a bound raised past a fixed one would be ended by the kill instead of
