@@ -12,8 +12,7 @@ type: application
 version: 0.2.0 # x-release-please-version
 
 # What `image.tag` defaults to, so an install pulls the Host this chart was
-# released with. `0.0.0` names no published image; the first release is what
-# gives it one.
+# released with.
 appVersion: "0.2.0" # x-release-please-version
 
 home: https://github.com/elct9620/workers-rb
