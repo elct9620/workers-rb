@@ -121,6 +121,13 @@ answers a request follows that Gateway's connection handling — one that keeps
 a connection open reaches one Host for its lifetime. `Env.node` reports the
 Pod's name, which changes when the Hosts are rolled.
 
+Each Host answers `/_health/live` and `/_health/ready` for whatever runs it:
+the first says the process is up, the second that this Host reads the shared
+directory, which is what a Pod that should be passed over gets wrong on its
+own. Both are the Host's on every hostname, so a Gateway pointed at the
+Service carries them on every Tenant's domain — turning them away there is
+the operator's to do.
+
 The database server is one Pod holding one volume, so `databases.storageClass`
 decides what a lost machine costs: a class whose volume follows the Pod has the
 server rescheduled, one bound to a machine has it waited for. NFS serves the
