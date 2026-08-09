@@ -22,7 +22,7 @@ GEM
     drb (2.2.3)
     i18n (1.15.2)
       concurrent-ruby (~> 1.0)
-    json (2.21.1)
+    json (2.21.2)
     kobako (0.21.1-aarch64-linux)
       msgpack (~> 1.7)
     kobako (0.21.1-aarch64-linux-musl)
@@ -144,7 +144,7 @@ CHECKSUMS
   connection_pool (3.0.2) sha256=33fff5ba71a12d2aa26cb72b1db8bba2a1a01823559fb01d29eb74c286e62e0a
   drb (2.2.3) sha256=0b00d6fdb50995fe4a45dea13663493c841112e4068656854646f418fda13373
   i18n (1.15.2) sha256=00f9eb62412fe593b2a65a97daa75300d37abb8f7202ec748e94b6d46a9dd1b5
-  json (2.21.1) sha256=13a43df75d95641443f5702dff350f237164a9d811ff0f2c2800d4d980220583
+  json (2.21.2) sha256=1f1d3b7cf2b3ba1a69beca0bb6db13d5438b80bff3cd54cdaaa620b9b07c1c6a
   kobako (0.21.1-aarch64-linux) sha256=58b5f2f6089986f123112cf68150fa291877d89dc07a1fa0c96bef8e9b180e1a
   kobako (0.21.1-aarch64-linux-musl) sha256=2e5a912879482d6edac4fc02c240582f89aa06e0a9187a0bade84e0e8c770c78
   kobako (0.21.1-arm64-darwin) sha256=2a1ced4c22a1272e6c0fa5877d0b49df4219182a54836afd2480622964d43b64
