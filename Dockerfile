@@ -14,6 +14,12 @@ ENV BUNDLE_PATH=/usr/local/bundle \
     WORKERS_APP_DIR=/app \
     RACK_ENV=production
 
+# What a Tenant's outbound requests are verified against comes from Debian
+# security updates, not from the copy frozen into the base image.
+RUN apt-get update \
+ && apt-get install --no-install-recommends -y ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /srv/workers
 
 FROM base AS build
