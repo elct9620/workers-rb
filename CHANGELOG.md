@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.1](https://github.com/elct9620/workers-rb/compare/v0.4.0...v0.4.1) (2026-10-21)
+
+
+### Bug Fixes
+
+* **docker:** take ca-certificates from Debian security updates ([ac37bab](https://github.com/elct9620/workers-rb/commit/ac37bab901d86f0a038318d20ac2813e0ec16804))
+
 ## [0.4.0](https://github.com/elct9620/workers-rb/compare/v0.3.0...v0.4.0) (2026-08-02)
 
 
