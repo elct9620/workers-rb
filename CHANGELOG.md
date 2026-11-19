@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.2](https://github.com/elct9620/workers-rb/compare/v0.4.1...v0.4.2) (2026-11-19)
+
+
+### Bug Fixes
+
+* **deps:** upgrade gems with security advisories ([#10](https://github.com/elct9620/workers-rb/issues/10)) ([c0f480e](https://github.com/elct9620/workers-rb/commit/c0f480efe45f1b5e5edbbcc05848abbaee574c1a))
+* **ruby:** move to 3.4.13 for the Regexp and String security fixes ([#7](https://github.com/elct9620/workers-rb/issues/7)) ([4cdf9b9](https://github.com/elct9620/workers-rb/commit/4cdf9b95763d29f9e68e45d08d09e3bd38541a93))
+
 ## [0.4.1](https://github.com/elct9620/workers-rb/compare/v0.4.0...v0.4.1) (2026-10-21)
 
 
